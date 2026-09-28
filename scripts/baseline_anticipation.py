@@ -1,0 +1,231 @@
+#!/usr/bin/env python
+"""Training-free baselines for the anticipatory switch task.
+
+Every baseline here is *causal by construction*: it is a function of features
+computable from tokens 1..t alone. The two count-based ones estimate their
+tables on the TRAIN split and are evaluated on TEST, so even a lookup table
+never sees its evaluation data.
+
+    never       always predict "no switch"      - the accuracy trap
+    always      always predict "switch"         - recall ceiling
+    prior       Bernoulli(train base rate)      - chance
+    naive_l2    switch iff the current token is second-language
+    hazard      P(switch | current language, length of current run so far)
+
+The hazard model emits a probability, so it needs a decision threshold. That
+threshold is tuned on the VALIDATION split and then applied unchanged to test -
+tuning it on test would be reporting an oracle. The default 0.5 is reported
+too, because what happens there is the whole lesson: the switch hazard never
+exceeds 0.26, so a correctly-calibrated model thresholded at 0.5 predicts "no
+switch" forever and scores 91% accuracy with an F1 of zero.
+
+``naive_l2`` is the checklist's "naive model": one bit of context, the language
+of the current token. ``hazard`` adds the one extra causal feature that matters
+- how long the current run has already gone on - and is the bar a learned model
+has to clear to have earned its parameters.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sys
+
+import numpy as np
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from src.anticipation import L2, N_DUR, DUR_LABELS, row_example  # noqa: E402
+from src.metrics import by_group, duration_scores, fmt_table, macro_f1, prf, wilson  # noqa: E402
+from src.streaming import iter_rows  # noqa: E402
+
+DEFAULT_PATH = "data/tagged.parquet"
+RUNPOS_CAP = 10          # run-position feature is capped; the tail is flat
+
+
+def run_position(langs: np.ndarray) -> np.ndarray:
+    """How many tokens the current run has already covered, inclusive of t.
+
+    Strictly causal: position t depends only on langs[:t+1].
+    """
+    pos = np.ones(len(langs), dtype=np.int64)
+    for i in range(1, len(langs)):
+        pos[i] = pos[i - 1] + 1 if langs[i] == langs[i - 1] else 1
+    return pos
+
+
+def collect(path: str, split: str, limit: int | None = None):
+    """Stream a split into flat arrays of causal features and labels."""
+    cur_lang, runpos, y_sw, y_dur, dur_ok, pair = [], [], [], [], [], []
+    for i, row in enumerate(iter_rows(path, split=split)):
+        if limit and i >= limit:
+            break
+        ex = row_example(row)
+        if ex is None:
+            continue
+        m = ex["y_sw"] >= 0                       # drop the final position
+        langs = ex["langs"].astype(np.int64)
+        cur_lang.append(langs[m])
+        runpos.append(np.minimum(run_position(langs), RUNPOS_CAP)[m])
+        y_sw.append(ex["y_sw"][m].astype(np.int64))
+        y_dur.append(ex["y_dur"][m].astype(np.int64))
+        dur_ok.append(ex["dur_known"][m])
+        pair.append(np.full(int(m.sum()), _pair_id(ex["first_language"],
+                                                   ex["second_language"])))
+    cat = lambda xs: np.concatenate(xs) if xs else np.empty(0, np.int64)  # noqa: E731
+    return dict(cur_lang=cat(cur_lang), runpos=cat(runpos), y_sw=cat(y_sw),
+                y_dur=cat(y_dur), dur_ok=cat(dur_ok).astype(bool), pair=cat(pair))
+
+
+_PAIRS: list[str] = []
+
+
+def _pair_id(a: str, b: str) -> int:
+    key = f"{a}->{b}"
+    if key not in _PAIRS:
+        _PAIRS.append(key)
+    return _PAIRS.index(key)
+
+
+def fit_hazard(train: dict) -> np.ndarray:
+    """P(switch at t+1 | current language, capped run position). Train only."""
+    table = np.zeros((2, RUNPOS_CAP + 1))
+    for lang in (0, 1):
+        for pos in range(1, RUNPOS_CAP + 1):
+            m = (train["cur_lang"] == lang) & (train["runpos"] == pos)
+            table[lang, pos] = train["y_sw"][m].mean() if m.any() else 0.0
+    return table
+
+
+def fit_duration(train: dict) -> np.ndarray:
+    """Most likely duration bucket given the language being switched INTO."""
+    out = np.zeros(2, dtype=np.int64)
+    for lang in (0, 1):
+        # switching into `lang` means the current token is the other language
+        m = (train["cur_lang"] == (1 - lang)) & (train["y_sw"] == 1) & train["dur_ok"]
+        if m.any():
+            out[lang] = np.bincount(train["y_dur"][m], minlength=N_DUR).argmax()
+    return out
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--path", default=DEFAULT_PATH)
+    ap.add_argument("--limit", type=int, default=None, help="rows per split, for a smoke run")
+    ap.add_argument("--threshold", type=float, default=0.5)
+    ap.add_argument("--json", default="data/baseline_anticipation.json")
+    ap.add_argument("--names", choices=["script_words", "transparent", "script", "hybrid", "language"],
+                    default="script_words",
+                    help="how named entities count (see src/segments.py); needs an "
+                         "is_entity column, else names count as tagged")
+    args = ap.parse_args()
+    import src.anticipation as _ant
+    _ant.NAMES = args.names
+
+    print("streaming train split ...", flush=True)
+    train = collect(args.path, "train", args.limit)
+    print(f"  {len(train['y_sw']):,} scored positions", flush=True)
+    print("streaming val split ...", flush=True)
+    val = collect(args.path, "val", args.limit)
+    print(f"  {len(val['y_sw']):,} scored positions", flush=True)
+    print("streaming test split ...", flush=True)
+    test = collect(args.path, "test", args.limit)
+    print(f"  {len(test['y_sw']):,} scored positions\n", flush=True)
+
+    base = train["y_sw"].mean()
+    hazard = fit_hazard(train)
+    rng = np.random.default_rng(0)
+
+    # Tune the hazard threshold on VAL, never on test.
+    val_p = hazard[val["cur_lang"], val["runpos"]]
+    grid = np.unique(np.round(np.sort(hazard.ravel()), 6))
+    grid = grid[grid > 0]
+    scored = [(prf(val["y_sw"], (val_p >= t).astype(np.int64))["f1"], float(t))
+              for t in grid]
+    best_f1, tau = max(scored)
+    print(f"hazard threshold tuned on val: tau={tau:.3f} (val F1 {best_f1:.3f})\n",
+          flush=True)
+
+    preds = {
+        "never": np.zeros_like(test["y_sw"]),
+        "always": np.ones_like(test["y_sw"]),
+        "prior": (rng.random(len(test["y_sw"])) < base).astype(np.int64),
+        "naive_l2": (test["cur_lang"] == L2).astype(np.int64),
+        "hazard@0.5": (hazard[test["cur_lang"], test["runpos"]] >= args.threshold).astype(np.int64),
+        "hazard@tuned": (hazard[test["cur_lang"], test["runpos"]] >= tau).astype(np.int64),
+    }
+
+    rows, detail = [], {}
+    for name, yp in preds.items():
+        s = prf(test["y_sw"], yp)
+        groups = by_group(test["y_sw"], yp, test["pair"])
+        named = {_PAIRS[int(k)]: v for k, v in groups.items()}
+        lo, hi = wilson(s["tp"], s["tp"] + s["fp"]) if s["tp"] + s["fp"] else (0, 0)
+        rows.append(dict(model=name,
+                         P=f"{s['precision']:.3f}", R=f"{s['recall']:.3f}",
+                         F1=f"{s['f1']:.3f}", macroF1=f"{macro_f1(named):.3f}",
+                         acc=f"{s['accuracy']:.3f}",
+                         prec95=f"[{lo:.3f},{hi:.3f}]"))
+        detail[name] = dict(overall=s, per_pair=named, macro_f1=macro_f1(named))
+
+    print(fmt_table(rows, ["model", "P", "R", "F1", "macroF1", "acc", "prec95"],
+                    f"Anticipatory switch prediction - TEST split "
+                    f"(base rate {test['y_sw'].mean():.4f})"))
+
+    # Per-direction, for the best training-free baseline.
+    print("\nDirectional breakdown (hazard@tuned):")
+    dirs = []
+    for lang, label in ((0, "L1->L2"), (1, "L2->L1")):
+        m = test["cur_lang"] == lang
+        s = prf(test["y_sw"][m], preds["hazard@tuned"][m])
+        dirs.append(dict(direction=label, n=f"{s['n']:,}",
+                         base=f"{s['base_rate']:.4f}", P=f"{s['precision']:.3f}",
+                         R=f"{s['recall']:.3f}", F1=f"{s['f1']:.3f}"))
+    print(fmt_table(dirs, ["direction", "n", "base", "P", "R", "F1"]))
+
+    print("\nHazard table  P(switch at t+1 | current run length so far):")
+    hz = [dict(run_len=str(pos),
+               after_L1=f"{hazard[0, pos]:.3f}", after_L2=f"{hazard[1, pos]:.3f}")
+          for pos in range(1, RUNPOS_CAP + 1)]
+    print(fmt_table(hz, ["run_len", "after_L1", "after_L2"]))
+
+    # --- duration ---------------------------------------------------------
+    dur_mode = fit_duration(train)
+    m = (test["y_sw"] == 1) & test["dur_ok"]
+    target_lang = 1 - test["cur_lang"][m]
+    d_true = test["y_dur"][m]
+    d_pred = dur_mode[target_lang]
+    ds = duration_scores(d_true, d_pred)
+    print(f"\nDuration at oracle switch positions (n={ds['n']:,}), "
+          f"mode-per-direction baseline:")
+    print(f"  bucket accuracy {ds['accuracy']:.3f} | within one bucket "
+          f"{ds['within_one']:.3f} | MAE {ds['mae_buckets']:.3f} buckets")
+    dur_rows = []
+    for lang, label in ((1, "into L2"), (0, "into L1")):
+        sel = target_lang == lang
+        if not sel.any():
+            continue
+        hist = np.bincount(d_true[sel], minlength=N_DUR) / int(sel.sum())
+        row = dict(target=label, n=f"{int(sel.sum()):,}",
+                   mode=DUR_LABELS[int(dur_mode[lang])],
+                   acc=f"{duration_scores(d_true[sel], d_pred[sel])['accuracy']:.3f}")
+        row.update({lab: f"{h:.3f}" for lab, h in zip(DUR_LABELS, hist)})
+        dur_rows.append(row)
+    print(fmt_table(dur_rows, ["target", "n", "mode", "acc"] + DUR_LABELS))
+
+    detail["_meta"] = dict(
+        train_positions=int(len(train["y_sw"])),
+        test_positions=int(len(test["y_sw"])),
+        train_base_rate=float(base), test_base_rate=float(test["y_sw"].mean()),
+        hazard_table=hazard.tolist(), duration_mode=dur_mode.tolist(),
+        duration=ds, pairs=_PAIRS, hazard_tau=float(tau),
+        val_positions=int(len(val["y_sw"])), hazard_val_f1=float(best_f1),
+    )
+    os.makedirs(os.path.dirname(args.json), exist_ok=True)
+    with open(args.json, "w") as fh:
+        json.dump(detail, fh, indent=2, default=float)
+    print(f"\nwrote {args.json}")
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,32 @@
+# --- Secrets --------------------------------------------------------------
+# HF_TOKEN / HF_FULL live here. Never commit it.
+.env
+.env.*
+
+# --- Data -----------------------------------------------------------------
+# SwitchLingua is a gated dataset: no corpus text or derived labels in git.
+# Everything under data/ is ignored except the small result summaries.
+data/*
+!data/*.json
+data/vocab_*.json
+data/consensus*.json
+data/gold_eval.json
+
+# --- Model weights and outputs -------------------------------------------
+models/
+out/
+
+# --- Python / tooling -----------------------------------------------------
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ipynb_checkpoints/
+*.egg-info/
+
+# --- Editors, OS, local agent state --------------------------------------
+.DS_Store
+.vscode/
+.idea/
+.superpowers/
+.claude/settings.local.json
