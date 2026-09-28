@@ -19,7 +19,7 @@ OUT = os.path.join(ROOT, "kaggle", "load_labels.ipynb")
 
 # Everything the label path imports (no torch, no models).
 MODULES = ["__init__", "routing", "tokenizer", "dict_tagger", "unicode_tagger",
-           "dispatch", "segments", "anticipation", "subword"]
+           "dispatch", "segments", "anticipation", "subword", "token_labels"]
 
 
 def md(text: str) -> dict:
@@ -34,7 +34,7 @@ def code(text: str) -> dict:
 INTRO = """
 # SwitchLingua — download our labels and choose a version
 
-Every token of the SwitchLingua corpus (234,172 conversations, 15 language pairs) already has a language label. This notebook downloads those labels from our **private** Hugging Face dataset and builds the prediction targets in the form you choose:
+Every token of the SwitchLingua corpus (234,172 conversations, 15 language pairs) already has a language label. With the default settings, the result is identical to `token_labels_word.parquet` / `token_labels_subword.parquet` in the same Hugging Face dataset; use this notebook to pick a different names policy or a subset. This notebook downloads those labels from our **private** Hugging Face dataset and builds the prediction targets in the form you choose:
 
 | Label | Meaning |
 |---|---|
@@ -128,29 +128,12 @@ print(df.groupby(["first_language", "second_language"]).size().to_string())
 LABEL = """
 import numpy as np
 import src.anticipation as A
-from src.anticipation import anticipatory_labels, token_slots
+from src.token_labels import subword_labels, word_labels
 
 A.NAMES = NAMES                                   # the names policy every label call uses
-LANG = np.array(["L1", "L2", "-"])
-CLASS = {-1: "", 0: "small", 1: "medium", 2: "large"}
-KEYS = ["y_sw", "y_len", "y_dur", "censored", "dur_known"]
-
-def readable(unit_col, units, slots):
-    lab = anticipatory_labels(np.asarray(slots, dtype=np.int8))
-    return {unit_col: list(units), "lang": LANG[np.asarray(slots)].tolist(),
-            "y_sw": lab["y_sw"].tolist(), "y_len": lab["y_len"].tolist(),
-            "y_dur": [CLASS[int(d)] for d in lab["y_dur"]],
-            "censored": lab["censored"].tolist(), "dur_known": lab["dur_known"].tolist()}
-
-meta = ["row_id", "first_language", "second_language", "split", "quality"]
-rows = []
 if LEVEL == "word":
     UNIT = "tokens"
-    for r in df.itertuples(index=False):
-        slots = token_slots(list(r.tokens), list(r.token_lang), r.first_language,
-                            r.second_language, list(r.is_entity))
-        rows.append({**{k: getattr(r, k) for k in meta}, **readable(UNIT, r.tokens, slots),
-                     "is_entity": [int(e) for e in r.is_entity]})
+    labels = word_labels(df)
 else:
     UNIT = "pieces"
     import glob
@@ -170,13 +153,7 @@ else:
     sw, stats = build_frame(df, texts, tok)
     print(f"{stats['rows']:,} rows, {stats['pieces']:,} pieces, "
           f"{stats['failed']} alignment failures, {stats['mixed_pieces']} mixed pieces")
-    split = dict(zip(df.row_id, df.split))
-    for r in sw.itertuples(index=False):
-        rows.append({"row_id": r.row_id, "first_language": r.first_language,
-                     "second_language": r.second_language, "split": split[r.row_id],
-                     "quality": r.quality, **readable(UNIT, r.pieces, r.piece_lang),
-                     "piece_ids": list(r.piece_ids)})
-labels = pd.DataFrame(rows)
+    labels = subword_labels(sw)
 print(f"labelled {len(labels):,} rows at the {LEVEL} level, names policy {NAMES!r}")
 """
 

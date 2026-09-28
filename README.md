@@ -40,27 +40,49 @@ HF_TOKEN=hf_...
 
 ## Get the labels
 
-**Easiest: the Kaggle notebook `kaggle/load_labels.ipynb`.** Upload it to Kaggle, add your Hugging Face token as a secret named `HF_TOKEN`, turn Internet on, and choose in its first cell:
-- **level:** `word` (one label per word) or `subword` (one per XLM-R piece)
-- **names policy:** `script_words` (default), `transparent`, or `script`
-- **which pairs, splits and how many rows**
-
-It writes a parquet and/or CSV with, per token: `lang` (L1/L2/-), `y_sw`, `y_len`, `y_dur` (small/medium/large), `censored`, `dur_known`. It needs no GPU; word labels take about a minute. It also runs locally in Jupyter.
-
-**Or download the files directly.** Nothing under `data/` is in git: the corpus is gated, and the labelled files are large. Download the final word-level labels:
+The labels are ready-made: every token already has its switch and duration targets. They live in the private Hugging Face dataset `cristae/switchlingua-tagged-final` (never in git: the corpus is gated). With `HF_TOKEN` in `.env`:
 
 ```bash
-./.venv/bin/hf download cristae/switchlingua-tagged-final --repo-type dataset --local-dir data/final
-cp data/final/tagged.parquet data/tagged.parquet
+./.venv/bin/python scripts/download_labels.py          # -> data/final/token_labels_{word,subword}.parquet
+./.venv/bin/python scripts/download_labels.py --all    # also the word-language files + data/tagged.parquet
 ```
 
-`data/final/switchlingua_tagged_rows.csv` holds the same labels as a one-row-per-conversation CSV, if you'd rather not use parquet.
+| File | One row per conversation; lists aligned to its… |
+|---|---|
+| `token_labels_word.parquet` (82 MB) | words (`tokens`); CJK per character |
+| `token_labels_subword.parquet` (108 MB) | XLM-R pieces (`pieces`, `piece_ids`), what an XLM-R model reads |
 
-The sub-word labels need the original SwitchLingua text. Download the CSVs into the Hugging Face cache, which is where the scripts look for them. Then build the labels (about 3 minutes on CPU):
+Columns in both:
+
+| Column | Meaning |
+|---|---|
+| `lang` | `L1`, `L2`, or `-` (punctuation and digits, which are skipped) |
+| `y_sw` | **1 if the next token switches language**, 0 if not, -1 where undefined |
+| `y_len` | at a switch: **how many tokens the new language lasts** |
+| `y_dur` | the class of `y_len`: `small` (1–2), `medium` (3–6), `large` (7+) |
+| `censored` / `dur_known` | the new run hits the end of the text / its class is certain anyway. Train duration only where `dur_known` |
+| `split` | `train` / `val` / `test` (`row_id % 10`) |
+
+```python
+import pandas as pd
+df = pd.read_parquet("data/final/token_labels_word.parquet")
+row = df.iloc[0]
+list(zip(row.tokens, row.lang, row.y_sw, row.y_dur))[:10]
+```
+
+**Other names policies or a subset: `kaggle/load_labels.ipynb`.** Upload it to Kaggle, add your token as a secret named `HF_TOKEN`, turn Internet on, and choose in its first cell:
+- the level: `word` or `subword`
+- the names policy: `script_words` (default), `transparent` or `script`
+- the pairs, splits and row limit
+
+With the defaults it reproduces the two files above. It needs no GPU, and it also runs locally in Jupyter.
+
+**Rebuilding the labels yourself** (maintainers). Download the original SwitchLingua CSVs into the Hugging Face cache, then:
 
 ```bash
 ./.venv/bin/hf download Shelton1013/SwitchLingua_text --repo-type dataset --token "$HF_TOKEN"
-./.venv/bin/python scripts/build_subword.py        # -> data/subword.parquet
+./.venv/bin/python scripts/build_subword.py            # -> data/subword.parquet (~3 min CPU)
+./.venv/bin/python scripts/export_token_labels.py      # -> data/final/token_labels_*.parquet
 ```
 
 ## What the labels look like
@@ -90,7 +112,7 @@ piece          lang  y_sw  y_len  y_dur
 ## Common commands
 
 ```bash
-./.venv/bin/python -m pytest tests/ -q                   # 229 tests
+./.venv/bin/python -m pytest tests/ -q                   # 232 tests
 ./.venv/bin/python scripts/shuffle_parquet.py            # -> data/tagged_shuffled.parquet (train on this)
 ./.venv/bin/python scripts/baseline_anticipation.py      # training-free baselines, ~4 min
 ./.venv/bin/python scripts/train_anticipation.py --build-vocab --path data/tagged_shuffled.parquet --steps 6000   # ~23 min on an M3
@@ -110,6 +132,7 @@ src/          library code
   segments.py                                      names policies, run-length encoding
   persist.py                                       parquet I/O, cached model passes
   subword.py                                       word labels -> XLM-R pieces
+  token_labels.py                                  the shared per-token label files (lang, y_sw, y_len, y_dur)
   anticipation.py                                  y_sw / y_len / y_dur label building
   streaming.py, causal_model.py, metrics.py        dataloader, causal transformer, metrics
 scripts/      command-line entry points (see "Common commands")
