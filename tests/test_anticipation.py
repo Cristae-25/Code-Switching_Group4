@@ -361,3 +361,28 @@ def test_names_policy_is_rejected_for_subword_units():
     mod = _train_script()
     with pytest.raises(SystemExit):
         mod.resolve_defaults(_args(unit="subword", names="transparent"))
+
+
+# --- raw XLM-R ids and report pairs ------------------------------------------
+
+def test_no_vocab_passes_raw_xlmr_ids_through():
+    ex = subword_example(_sw_row([5, 250_001, 17, 99], [0, 0, 1, 1]))
+    ds = SwitchWindowDataset("unused", None, window=8, stride=8, unit="subword")
+    w = next(iter(ds._windows(ex)))
+    assert list(w["word_ids"][:4]) == [5, 250_001, 17, 99]
+
+
+def test_windows_carry_the_exact_pair_for_reports():
+    from src.evaluation import PAIR_KEYS
+    ds = SwitchWindowDataset("unused", None, window=8, stride=8, unit="subword")
+    for l2 in ("French", "English"):
+        row = dict(_sw_row([5, 6, 7], [0, 1, 0]), first_language="German", second_language=l2)
+        w = next(iter(ds._windows(subword_example(row))))
+        assert PAIR_KEYS[int(w["report_pair"])] == f"German->{l2}"
+
+
+def test_collate_keeps_report_pairs():
+    from src.streaming import collate
+    ds = SwitchWindowDataset("unused", None, window=8, stride=8, unit="subword")
+    wins = [next(iter(ds._windows(subword_example(_sw_row([5, 6, 7], [0, 1, 0])))))] * 2
+    assert collate(wins)["report_pair"].shape == (2,)

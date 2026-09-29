@@ -36,6 +36,7 @@ import torch
 from torch.utils.data import IterableDataset, get_worker_info
 
 from .anticipation import N_DUR, NONE, row_example, subword_example
+from .evaluation import PAIR_KEYS, pair_key
 
 PAD, UNK, BOS = 0, 1, 2
 _SPECIALS = ["<pad>", "<unk>", "<bos>"]
@@ -130,6 +131,9 @@ def encode(words, vocab) -> np.ndarray:
 
 
 def encode_pieces(ids, vocab) -> np.ndarray:
+    """Compact ids for the from-scratch model; ``vocab=None`` keeps raw XLM-R ids."""
+    if vocab is None:
+        return np.asarray(ids, dtype=np.int64)
     return np.fromiter((vocab.get(str(int(i)), UNK) for i in ids),
                        dtype=np.int64, count=len(ids))
 
@@ -167,6 +171,7 @@ class SwitchWindowDataset(IterableDataset):
         langs = ex["langs"].astype(np.int64)
         n = len(ids)
         pair = self.pair_index.get(ex["first_language"], 0)
+        report = PAIR_KEYS.index(pair_key(ex["first_language"], ex["second_language"]))
         warmup = w - s
 
         start = 0
@@ -196,6 +201,7 @@ class SwitchWindowDataset(IterableDataset):
             out["dur_mask"] = dur & scored
 
             out["pair_id"] = np.int64(pair)
+            out["report_pair"] = np.int64(report)
             out["row_id"] = np.int64(ex["row_id"])
             yield out
 
@@ -237,7 +243,7 @@ def collate(batch):
         out[key] = torch.from_numpy(np.stack([b[key] for b in batch]))
     for key in ("sw_mask", "dur_mask"):
         out[key] = torch.from_numpy(np.stack([b[key] for b in batch]))
-    for key in ("pair_id", "row_id"):
+    for key in ("pair_id", "report_pair", "row_id"):
         out[key] = torch.tensor([int(b[key]) for b in batch])
     return out
 
