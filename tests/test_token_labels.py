@@ -36,3 +36,16 @@ def test_subword_labels_keep_pieces_and_ids():
     assert r.split == "test" and list(r.pieces) == ["▁", "今日", "▁good"]
     assert list(r.lang) == ["-", "L1", "L2"] and list(r.y_sw) == [-1, 1, -1]
     assert list(r.piece_ids) == [6, 100, 200]
+
+
+def test_to_subword_frame_restores_the_training_format():
+    from src.token_labels import to_subword_frame
+    labels = pd.DataFrame([dict(row_id=r, first_language="Spanish", second_language="English",
+                                split="train", quality="provisional", pieces=["▁a", ",", "▁b"],
+                                piece_ids=[10 + r, 4, 20 + r], lang=["L1", "-", "L2"])
+                           for r in range(6)])
+    out = to_subword_frame(labels, seed=0)
+    assert sorted(out.row_id) == list(range(6)) and list(out.row_id) != list(range(6))
+    r = out.set_index("row_id").loc[3]
+    assert list(r.piece_lang) == [0, NONE, 1] and list(r.piece_ids) == [13, 4, 23]
+    assert list(out.row_id) == list(to_subword_frame(labels, seed=0).row_id)   # deterministic

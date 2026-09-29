@@ -69,3 +69,21 @@ def subword_labels(frame: pd.DataFrame) -> pd.DataFrame:
         rows.append({**_meta(r), "pieces": list(r.pieces),
                      **readable(r.pieces, r.piece_lang), "piece_ids": list(r.piece_ids)})
     return pd.DataFrame(rows)
+
+
+def to_subword_frame(labels: pd.DataFrame, seed: int = 0) -> pd.DataFrame:
+    """The training format (``data/subword.parquet`` columns) from ``token_labels_subword``.
+
+    Rows are shuffled with ``seed`` so streaming is not a curriculum by language;
+    ``row_id`` (and so the train/val/test split) travels with each row.
+    """
+    slot = {"L1": 0, "L2": 1, "-": 2}
+    out = pd.DataFrame({
+        "row_id": labels.row_id.astype(int).to_numpy(),
+        "first_language": labels.first_language.to_numpy(),
+        "second_language": labels.second_language.to_numpy(),
+        "quality": labels.quality.to_numpy(),
+        "piece_ids": [np.asarray(x, dtype=np.int32) for x in labels.piece_ids],
+        "piece_lang": [np.asarray([slot[s] for s in x], dtype=np.int8) for x in labels.lang],
+    })
+    return out.iloc[np.random.default_rng(seed).permutation(len(out))].reset_index(drop=True)
