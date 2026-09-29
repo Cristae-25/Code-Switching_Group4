@@ -1,17 +1,22 @@
 #!/usr/bin/env python
-"""Train the causal transformer baseline and score it against the naive rules.
+"""Train an anticipation model and score it with the shared evaluation report.
 
-Run order:
-    python scripts/train_anticipation.py --build-vocab      # once, ~1 min
-    python scripts/train_anticipation.py --steps 4000
+    # the from-scratch causal transformer (words, or XLM-R pieces)
+    python scripts/train_anticipation.py --build-vocab --path data/tagged_shuffled.parquet --steps 6000
+    python scripts/train_anticipation.py --unit subword --build-vocab --steps 6000
+    # XLM-R with a causal mask (needs a GPU: see kaggle/train_xlmr.ipynb)
+    python scripts/train_anticipation.py --model xlmr --unit subword --steps 12000 --batch-size 16
 
-Everything is streamed; the process never holds more than a shuffle buffer of
-windows. Evaluation reuses ``src.metrics`` so the numbers are directly
-comparable with ``scripts/baseline_anticipation.py``.
+Protocol (identical for every model): train on the train split; tune the
+switch threshold on val; score test once with ``src.evaluation.full_report``
+(switch P/R/F1 per pair, macro-F1, per direction; 3-class duration at true
+switch points). ``check_causality`` must pass before training starts.
+Everything is streamed; the process never holds more than a shuffle buffer.
 """
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import sys
@@ -23,11 +28,14 @@ import torch.nn as nn
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.anticipation import DUR_LABELS, N_DUR  # noqa: E402
-from src.causal_model import CausalSwitchModel, check_causality  # noqa: E402
-from src.metrics import by_group, confusion_table, duration_scores, fmt_table, macro_f1, prf  # noqa: E402
+from src.anticipation import N_DUR  # noqa: E402
+from src.causal_model import check_causality  # noqa: E402
+from src.evaluation import format_report, full_report  # noqa: E402
+from src.metrics import prf  # noqa: E402
+from src.models import build_model  # noqa: E402
 from src.streaming import (DEFAULT_PATHS, VOCAB_PATHS, build_subword_vocab,  # noqa: E402
                            build_vocab, make_loader)
+from src.subword import XLMR_VOCAB  # noqa: E402
 
 UNIT_DEFAULTS = {"word": dict(window=256, stride=192, vocab_size=50_000,
                               out="data/anticipation_model.json",
@@ -35,12 +43,22 @@ UNIT_DEFAULTS = {"word": dict(window=256, stride=192, vocab_size=50_000,
                  "subword": dict(window=384, stride=288, vocab_size=100_000,
                                  out="data/anticipation_model_subword.json",
                                  ckpt="models/anticipation_subword.pt")}
+MODEL_DEFAULTS = {"scratch": dict(lr=3e-4),
+                  "xlmr": dict(lr=2e-5, out="data/anticipation_xlmr.json",
+                               ckpt="models/anticipation_xlmr.pt")}
+PAIRS = ["Cantonese", "Arabic", "Philippines", "German", "Chinese", "Vietnamese",
+         "Malay", "Japanese", "Hindi", "Korean", "Spanish", "French", "Russian",
+         "Italian"]
+PAIR_INDEX = {p: i for i, p in enumerate(PAIRS)}
 
 
 def resolve_defaults(args):
-    """Fill unit-dependent defaults, so a sub-word run never overwrites the word model."""
-    for k, v in UNIT_DEFAULTS[args.unit].items():
-        if getattr(args, k) is None:
+    """Fill model- and unit-dependent defaults; no run overwrites another model's files."""
+    model = getattr(args, "model", "scratch")
+    if model == "xlmr" and args.unit != "subword":
+        raise SystemExit("--model xlmr reads XLM-R pieces: use --unit subword")
+    for k, v in {**UNIT_DEFAULTS[args.unit], **MODEL_DEFAULTS[model]}.items():
+        if getattr(args, k, None) is None:
             setattr(args, k, v)
     if args.path is None:
         args.path = DEFAULT_PATHS[args.unit]
@@ -48,40 +66,54 @@ def resolve_defaults(args):
         # data/subword.parquet was built with the default names policy baked in.
         raise SystemExit("--names only applies to --unit word: the sub-word labels were "
                          "built with script_words (use kaggle/load_labels.ipynb for others)")
+    if args.window > 512 and model == "xlmr":
+        raise SystemExit("XLM-R reads at most 512 positions: use --window 512 or less")
     return args
-PAIRS = ["Cantonese", "Arabic", "Philippines", "German", "Chinese", "Vietnamese",
-         "Malay", "Japanese", "Hindi", "Korean", "Spanish", "French", "Russian",
-         "Italian"]
-PAIR_INDEX = {p: i for i, p in enumerate(PAIRS)}
 
 
 def device_of(name: str) -> torch.device:
     if name != "auto":
         return torch.device(name)
-    if torch.backends.mps.is_available():
-        return torch.device("mps")
-    return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    return torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+
+
+def autocast(dev):
+    """fp16 on CUDA (a T4 has no bf16); full precision elsewhere."""
+    if dev.type == "cuda":
+        return torch.autocast("cuda", dtype=torch.float16)
+    return contextlib.nullcontext()
 
 
 @torch.no_grad()
-def evaluate(model, loader, dev, max_batches=0, threshold=0.5):
+def evaluate(model, loader, dev, max_batches=0):
+    """Logits and labels at every scored position, with pair and direction."""
     model.eval()
-    logits, truth, pairs, dtrue, dpred = [], [], [], [], []
+    out = {k: [] for k in ("logit", "y", "pair", "lang", "dtrue", "dpred")}
     for i, b in enumerate(loader):
         if max_batches and i >= max_batches:
             break
-        sw, dur = model(b["word_ids"].to(dev), b["lang_ids"].to(dev),
-                        b["pair_id"].to(dev))
-        m = b["sw_mask"].to(dev)
-        logits.append(sw[m].float().cpu().numpy())
-        truth.append(b["y_sw"].to(dev)[m].cpu().numpy())
-        pairs.append(b["pair_id"].to(dev).unsqueeze(1).expand_as(m)[m].cpu().numpy())
-        dm = b["dur_mask"].to(dev)
+        with autocast(dev):
+            sw, dur = model(b["word_ids"].to(dev), b["lang_ids"].to(dev), b["pair_id"].to(dev))
+        m = b["sw_mask"]
+        out["logit"].append(sw.float().cpu()[m].numpy())
+        out["y"].append(b["y_sw"][m].numpy())
+        out["pair"].append(b["report_pair"].unsqueeze(1).expand_as(m)[m].numpy())
+        out["lang"].append(b["lang_ids"][m].numpy())
+        dm = b["dur_mask"]
         if dm.any():
-            dtrue.append(b["y_dur"].to(dev)[dm].cpu().numpy())
-            dpred.append(dur[dm].argmax(-1).cpu().numpy())
-    cat = lambda xs: np.concatenate(xs) if xs else np.empty(0)  # noqa: E731
-    return (cat(logits), cat(truth), cat(pairs), cat(dtrue), cat(dpred))
+            out["dtrue"].append(b["y_dur"][dm].numpy())
+            out["dpred"].append(dur.float().cpu()[dm].argmax(-1).numpy())
+    return {k: np.concatenate(v) if v else np.empty(0) for k, v in out.items()}
+
+
+def make_scheduler(opt, lrs, steps):
+    """One-cycle schedule; the warm-up is at least 2 steps (OneCycleLR divides by it)."""
+    if steps < 4:
+        return torch.optim.lr_scheduler.LambdaLR(opt, lambda _: 1.0)
+    return torch.optim.lr_scheduler.OneCycleLR(opt, max_lr=lrs, total_steps=steps,
+                                               pct_start=min(0.5, max(0.1, 2.5 / steps)))
 
 
 def tune_threshold(prob, truth):
@@ -92,8 +124,15 @@ def tune_threshold(prob, truth):
     return best[1], best[0]
 
 
+def score(res, tau):
+    pred = (1 / (1 + np.exp(-res["logit"])) >= tau).astype(int)
+    return full_report(res["y"], pred, res["pair"], res["lang"], res["dtrue"], res["dpred"])
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
+    ap.add_argument("--model", choices=["scratch", "xlmr"], default="scratch")
+    ap.add_argument("--xlmr-name", default="xlm-roberta-base")
     ap.add_argument("--path", default=None)
     ap.add_argument("--build-vocab", action="store_true")
     ap.add_argument("--vocab-size", type=int, default=None)
@@ -104,45 +143,47 @@ def main() -> None:
     ap.add_argument("--d-model", type=int, default=256)
     ap.add_argument("--layers", type=int, default=4)
     ap.add_argument("--heads", type=int, default=4)
-    ap.add_argument("--lr", type=float, default=3e-4)
+    ap.add_argument("--lr", type=float, default=None, help="default: 3e-4 scratch, 2e-5 xlmr")
+    ap.add_argument("--head-lr", type=float, default=1e-3, help="xlmr: learning rate of the two heads")
     ap.add_argument("--dur-weight", type=float, default=0.3)
     ap.add_argument("--workers", type=int, default=0)
     ap.add_argument("--device", default="auto")
-    ap.add_argument("--eval-batches", type=int, default=0,
-                    help="0 = score the whole split")
+    ap.add_argument("--eval-batches", type=int, default=0, help="0 = score the whole split")
     ap.add_argument("--train-langs", default="",
-                    help="comma-separated first_languages to TRAIN on "
-                         "(default: all). Everything else becomes the zero-shot set.")
+                    help="comma-separated first_languages to TRAIN on (default: all). "
+                         "Everything else becomes the zero-shot set.")
     ap.add_argument("--no-pair", action="store_true",
-                    help="drop the language-pair embedding - required for a "
-                         "held-out pair the model has never seen")
+                    help="drop the language-pair embedding (scratch model)")
     ap.add_argument("--unit", choices=["word", "subword"], default="word")
     ap.add_argument("--no-lang", action="store_true",
                     help="no language input (implied by --unit subword)")
-    ap.add_argument("--out", default=None, help="default depends on --unit")
-    ap.add_argument("--ckpt", default=None, help="default depends on --unit")
+    ap.add_argument("--out", default=None, help="default depends on --model and --unit")
+    ap.add_argument("--ckpt", default=None, help="default depends on --model and --unit")
     ap.add_argument("--names", choices=["script_words", "transparent", "script", "hybrid", "language"],
                     default="script_words",
-                    help="how named entities count (see src/segments.py); needs an "
-                         "is_entity column, else names count as tagged")
+                    help="how named entities count (see src/segments.py); word units only")
     args = ap.parse_args()
     import src.anticipation as _ant
     _ant.NAMES = args.names
     resolve_defaults(args)
-    vocab_path = VOCAB_PATHS[args.unit]
     use_lang = not (args.no_lang or args.unit == "subword")
 
-    if args.build_vocab or not os.path.exists(vocab_path):
-        t0 = time.time()
-        print("building vocabulary from the train split ...", flush=True)
-        builder = build_vocab if args.unit == "word" else build_subword_vocab
-        vocab = builder(args.path, args.vocab_size)
-        os.makedirs(os.path.dirname(vocab_path), exist_ok=True)
-        json.dump(vocab, open(vocab_path, "w"))
-        print(f"  {len(vocab):,} types in {time.time()-t0:.0f}s -> {vocab_path}")
-    vocab = json.load(open(vocab_path))
-    print(f"vocab {len(vocab):,}")
-    print(f"unit {args.unit} | language input {'on' if use_lang else 'off'}")
+    if args.model == "xlmr":
+        vocab, vocab_size = None, XLMR_VOCAB          # raw XLM-R ids, no vocabulary
+    else:
+        vocab_path = VOCAB_PATHS[args.unit]
+        if args.build_vocab or not os.path.exists(vocab_path):
+            t0 = time.time()
+            print("building vocabulary from the train split ...", flush=True)
+            builder = build_vocab if args.unit == "word" else build_subword_vocab
+            vocab = builder(args.path, args.vocab_size)
+            os.makedirs(os.path.dirname(vocab_path), exist_ok=True)
+            json.dump(vocab, open(vocab_path, "w"))
+            print(f"  {len(vocab):,} types in {time.time()-t0:.0f}s -> {vocab_path}")
+        vocab = json.load(open(vocab_path))
+        vocab_size = len(vocab)
+    print(f"model {args.model} | unit {args.unit} | vocab {vocab_size:,} | "
+          f"language input {'on' if use_lang else 'off'}")
 
     train_langs = [x.strip() for x in args.train_langs.split(",") if x.strip()]
     holdout = [p for p in PAIRS if p not in train_langs] if train_langs else []
@@ -151,16 +192,13 @@ def main() -> None:
         print(f"zero-shot held out: {', '.join(holdout)}")
 
     dev = device_of(args.device)
-    model = CausalSwitchModel(len(vocab), d_model=args.d_model,
-                              n_layers=args.layers, n_heads=args.heads,
-                              d_ff=args.d_model * 2, max_len=args.window,
-                              n_pairs=len(PAIRS),
-                              use_pair=not (args.no_pair or bool(holdout)),
-                              use_lang=use_lang).to(dev)
+    model = build_model(vars(args), vocab_size, n_pairs=len(PAIRS),
+                        use_pair=args.model == "scratch" and not (args.no_pair or bool(holdout)),
+                        use_lang=use_lang)
     n_param = sum(p.numel() for p in model.parameters())
-    print(f"device {dev} | {n_param/1e6:.2f}M params")
+    print(f"device {dev} | {n_param/1e6:.1f}M params")
 
-    chk = check_causality(model, len(vocab), seq_len=32, device="cpu")
+    chk = check_causality(model, vocab_size, seq_len=32, device="cpu")
     print(f"causality check: max logit drift {chk['max_abs_logit_drift']:.2e} "
           f"over {chk['positions_tested']} prefixes -> "
           f"{'PREFIX-ONLY OK' if chk['causal'] else 'LEAK'}")
@@ -168,18 +206,22 @@ def main() -> None:
         raise SystemExit("aborting: model is not causal")
     model.to(dev)
 
-    common = dict(window=args.window, stride=args.stride, pair_index=PAIR_INDEX,
-                  unit=args.unit)
-    train_loader = make_loader(args.path, vocab, "train", args.batch_size,
-                               args.workers, languages=train_langs or None, **common)
-    val_loader = make_loader(args.path, vocab, "val", args.batch_size, 0,
-                             languages=train_langs or None, **common)
-    test_loader = make_loader(args.path, vocab, "test", args.batch_size, 0,
-                              languages=train_langs or None, **common)
+    common = dict(window=args.window, stride=args.stride, pair_index=PAIR_INDEX, unit=args.unit)
+    loader = lambda split, langs, workers=0: make_loader(  # noqa: E731
+        args.path, vocab, split, args.batch_size, workers, languages=langs, **common)
+    train_loader = loader("train", train_langs or None, args.workers)
+    val_loader, test_loader = loader("val", train_langs or None), loader("test", train_langs or None)
 
-    opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0.01)
-    sched = torch.optim.lr_scheduler.OneCycleLR(
-        opt, max_lr=args.lr, total_steps=args.steps, pct_start=0.1)
+    if args.model == "xlmr":                           # pretrained body slow, new heads fast
+        heads = [p for n, p in model.named_parameters() if n.startswith("head_")]
+        body = [p for n, p in model.named_parameters() if not n.startswith("head_")]
+        groups, lrs = [dict(params=body, lr=args.lr), dict(params=heads, lr=args.head_lr)], \
+            [args.lr, args.head_lr]
+    else:
+        groups, lrs = [dict(params=list(model.parameters()), lr=args.lr)], [args.lr]
+    opt = torch.optim.AdamW(groups, weight_decay=0.01)
+    sched = make_scheduler(opt, lrs, args.steps)
+    scaler = torch.amp.GradScaler("cuda", enabled=dev.type == "cuda")
     bce = nn.BCEWithLogitsLoss(reduction="none")
     ce = nn.CrossEntropyLoss(reduction="none")
 
@@ -189,91 +231,48 @@ def main() -> None:
         for b in train_loader:
             if step >= args.steps:
                 break
-            sw, dur = model(b["word_ids"].to(dev), b["lang_ids"].to(dev),
-                            b["pair_id"].to(dev))
+            with autocast(dev):
+                sw, dur = model(b["word_ids"].to(dev), b["lang_ids"].to(dev),
+                                b["pair_id"].to(dev))
+            sw, dur = sw.float(), dur.float()
             m = b["sw_mask"].to(dev)
             loss = (bce(sw, b["y_sw"].to(dev).float()) * m).sum() / m.sum().clamp(min=1)
             dm = b["dur_mask"].to(dev)
             if dm.any():
                 dl = ce(dur.reshape(-1, N_DUR), b["y_dur"].to(dev).reshape(-1))
-                loss = loss + args.dur_weight * (
-                    (dl * dm.reshape(-1)).sum() / dm.sum().clamp(min=1))
+                loss = loss + args.dur_weight * ((dl * dm.reshape(-1)).sum() / dm.sum().clamp(min=1))
             opt.zero_grad(set_to_none=True)
-            loss.backward()
+            scaler.scale(loss).backward()
+            scaler.unscale_(opt)
             nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-            opt.step()
+            scaler.step(opt)
+            scaler.update()
             sched.step()
             running.append(loss.detach().item())
             step += 1
             if step % 200 == 0:
                 print(f"  step {step:>5}/{args.steps}  loss {np.mean(running[-200:]):.4f}"
-                      f"  {step/(time.time()-t0):.1f} it/s", flush=True)
-            model.train()
-
+                      f"  {step/(time.time()-t0):.2f} it/s", flush=True)
     print(f"trained {step} steps in {(time.time()-t0)/60:.1f} min")
 
-    vl, vt, _, _, _ = evaluate(model, val_loader, dev, args.eval_batches)
-    vprob = 1 / (1 + np.exp(-vl))
-    tau, vf1 = tune_threshold(vprob, vt)
+    val = evaluate(model, val_loader, dev, args.eval_batches)
+    tau, vf1 = tune_threshold(1 / (1 + np.exp(-val["logit"])), val["y"])
     print(f"threshold tuned on val: tau={tau:.3f} (val F1 {vf1:.3f})")
 
-    tl, tt, tp, dt_, dp_ = evaluate(model, test_loader, dev, args.eval_batches)
-    prob = 1 / (1 + np.exp(-tl))
-    pred = (prob >= tau).astype(int)
-    s = prf(tt, pred)
-    groups = by_group(tt, pred, tp)
-    named = {PAIRS[int(k)]: v for k, v in groups.items()}
-
-    print(fmt_table([dict(model="causal-transformer",
-                          P=f"{s['precision']:.3f}", R=f"{s['recall']:.3f}",
-                          F1=f"{s['f1']:.3f}", macroF1=f"{macro_f1(named):.3f}",
-                          acc=f"{s['accuracy']:.3f}", n=f"{s['n']:,}")],
-                    ["model", "P", "R", "F1", "macroF1", "acc", "n"],
-                    f"\nTEST split (base rate {tt.mean():.4f})"))
-
-    print("\nPer language pair:")
-    print(fmt_table(
-        [dict(pair=k, n=f"{v['n']:,}", base=f"{v['base_rate']:.3f}",
-              P=f"{v['precision']:.3f}", R=f"{v['recall']:.3f}", F1=f"{v['f1']:.3f}")
-         for k, v in sorted(named.items(), key=lambda kv: -kv[1]["f1"])],
-        ["pair", "n", "base", "P", "R", "F1"]))
-
+    report = score(evaluate(model, test_loader, dev, args.eval_batches), tau)
+    print("\n" + format_report(report, f"TEST split - {args.model} ({args.unit})"))
+    payload = dict(model=args.model, unit=args.unit, **report, tau=tau, val_f1=vf1,
+                   params=n_param, causality=chk, steps=step, args=vars(args))
     if holdout:
-        zs_loader = make_loader(args.path, vocab, "test", args.batch_size, 0,
-                                languages=holdout, **common)
-        zl, zt, zp, _, _ = evaluate(model, zs_loader, dev, args.eval_batches)
-        zpred = (1 / (1 + np.exp(-zl)) >= tau).astype(int)
-        zs = prf(zt, zpred)
-        zgroups = {PAIRS[int(k)]: v
-                   for k, v in by_group(zt, zpred, zp).items()}
-        print("\nZERO-SHOT - language pairs never seen in training:")
-        print(fmt_table(
-            [dict(pair=k, n=f"{v['n']:,}", base=f"{v['base_rate']:.3f}",
-                  P=f"{v['precision']:.3f}", R=f"{v['recall']:.3f}",
-                  F1=f"{v['f1']:.3f}")
-             for k, v in sorted(zgroups.items(), key=lambda kv: -kv[1]["f1"])]
-            + [dict(pair="ALL held out", n=f"{zs['n']:,}",
-                    base=f"{zs['base_rate']:.3f}", P=f"{zs['precision']:.3f}",
-                    R=f"{zs['recall']:.3f}", F1=f"{zs['f1']:.3f}")],
-            ["pair", "n", "base", "P", "R", "F1"]))
+        zs = score(evaluate(model, loader("test", holdout), dev, args.eval_batches), tau)
+        print("\n" + format_report(zs, "ZERO-SHOT - language pairs never seen in training"))
+        payload["zero_shot"] = dict(**zs, holdout=holdout)
 
-    ds = duration_scores(dt_, dp_)
-    print(f"\nDuration head (oracle switch positions, n={ds['n']:,}): "
-          f"3-class acc {ds['accuracy']:.3f} | macro-F1 {ds['macro_f1']:.3f} "
-          f"| within one {ds['within_one']:.3f}")
-    print(confusion_table(ds["confusion"], DUR_LABELS))
-
-    os.makedirs(os.path.dirname(args.ckpt), exist_ok=True)
+    os.makedirs(os.path.dirname(args.ckpt) or ".", exist_ok=True)
     torch.save(dict(state=model.state_dict(), args=vars(args), tau=tau,
-                    vocab_size=len(vocab), use_lang=use_lang), args.ckpt)
-    payload = dict(overall=s, per_pair=named, macro_f1=macro_f1(named),
-                   duration=ds, tau=tau, val_f1=vf1, params=n_param,
-                   causality=chk, steps=step, args=vars(args))
-    if holdout:
-        payload["zero_shot"] = dict(overall=zs, per_pair=zgroups,
-                                    macro_f1=macro_f1(zgroups), holdout=holdout)
-    json.dump(payload,
-              open(args.out, "w"), indent=2, default=float)
+                    vocab_size=vocab_size, use_lang=use_lang), args.ckpt)
+    os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
+    json.dump(payload, open(args.out, "w"), indent=2, default=float)
     print(f"\nwrote {args.out} and {args.ckpt}")
 
 

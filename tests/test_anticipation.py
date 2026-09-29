@@ -338,7 +338,7 @@ def _train_script():
 def _args(**kw):
     import argparse
     base = dict(unit="word", path=None, window=None, stride=None, vocab_size=None,
-                out=None, ckpt=None, names="script_words", no_lang=False)
+                out=None, ckpt=None, names="script_words", no_lang=False, model="scratch", lr=None)
     return argparse.Namespace(**{**base, **kw})
 
 
@@ -386,3 +386,24 @@ def test_collate_keeps_report_pairs():
     ds = SwitchWindowDataset("unused", None, window=8, stride=8, unit="subword")
     wins = [next(iter(ds._windows(subword_example(_sw_row([5, 6, 7], [0, 1, 0])))))] * 2
     assert collate(wins)["report_pair"].shape == (2,)
+
+
+def test_xlmr_needs_subword_units_and_has_its_own_outputs():
+    mod = _train_script()
+    with pytest.raises(SystemExit):
+        mod.resolve_defaults(_args(model="xlmr"))                # word units: refused
+    a = mod.resolve_defaults(_args(model="xlmr", unit="subword"))
+    assert a.ckpt == "models/anticipation_xlmr.pt" and a.out == "data/anticipation_xlmr.json"
+    assert a.lr == 2e-5 and a.window <= 512
+    s = mod.resolve_defaults(_args())
+    assert s.lr == 3e-4
+
+
+def test_scheduler_handles_very_short_runs():
+    torch = pytest.importorskip("torch")
+    mod = _train_script()
+    for steps in (1, 3, 10, 40):
+        opt = torch.optim.AdamW([torch.nn.Parameter(torch.zeros(1))], lr=1e-3)
+        sched = mod.make_scheduler(opt, [1e-3], steps)
+        for _ in range(steps):
+            opt.step(); sched.step()

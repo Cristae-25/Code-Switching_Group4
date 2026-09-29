@@ -20,7 +20,7 @@ import torch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.causal_model import CausalSwitchModel  # noqa: E402
+from src.models import build_model  # noqa: E402
 from src.metrics import prf  # noqa: E402
 from src.streaming import (COLUMNS, DEFAULT_PATHS, VOCAB_PATHS,  # noqa: E402
                            SwitchWindowDataset, collate, example_for, iter_rows)
@@ -48,15 +48,13 @@ def main() -> None:
     a = ck["args"]
     unit = a.get("unit", "word")          # checkpoints from before --unit are word models
     path = args.path or DEFAULT_PATHS[unit]
-    vocab = json.load(open(args.vocab or VOCAB_PATHS[unit]))
     state = ck["state"]
-    model = CausalSwitchModel(ck["vocab_size"], d_model=a["d_model"],
-                              n_layers=a["layers"], n_heads=a["heads"],
-                              d_ff=a["d_model"] * 2, max_len=a["window"],
-                              n_pairs=14,
-                              use_pair=state.get("pair_emb.weight") is not None,
-                              use_lang=state.get("lang_emb.weight") is not None,
-                              n_dur=state["head_dur.weight"].shape[0])
+    xlmr = a.get("model", "scratch") == "xlmr"
+    vocab = None if xlmr else json.load(open(args.vocab or VOCAB_PATHS[unit]))
+    model = build_model(a, ck["vocab_size"], n_pairs=14,
+                        use_pair=state.get("pair_emb.weight") is not None,
+                        use_lang=state.get("lang_emb.weight") is not None,
+                        n_dur=state["head_dur.weight"].shape[0], pretrained=False)
     model.load_state_dict(state)
     model.eval().to(args.device)
     tau = ck["tau"]
