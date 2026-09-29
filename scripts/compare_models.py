@@ -30,13 +30,20 @@ DEFAULT_SPECS = [
     "data/anticipation_model_subword.json",
     "data/anticipation_xlmr.json",
     "data/anticipation_xlmr_zeroshot.json",
+    "data/anticipation_roberta.json",
+    "data/anticipation_mbert.json",
+    "data/anticipation_model_subword_zeroshot.json",
 ]
 
 
 def _summary(label: str, rep: dict) -> dict:
     d = rep.get("per_direction", {})
     dur = rep.get("duration") or {}
+    sh = rep.get("shared")
     return dict(label=label, f1=rep["overall"]["f1"], macro_f1=rep["macro_f1"],
+                shared_f1=sh["overall"]["f1"] if sh else None,
+                shared_macro_f1=sh["macro_f1"] if sh else None,
+                shared_per_pair={k: v["f1"] for k, v in sh["per_pair"].items()} if sh else {},
                 into_l2=d.get("into L2", {}).get("f1"), into_l1=d.get("into L1", {}).get("f1"),
                 dur_acc=dur.get("accuracy"), dur_macro_f1=dur.get("macro_f1"),
                 per_pair={k: v["f1"] for k, v in rep["per_pair"].items()})
@@ -89,11 +96,16 @@ def to_markdown(runs, table: pd.DataFrame) -> str:
              "points whose class is certain. **Words** and **pieces** are different units "
              "(a word is 1.3–1.7 pieces), so compare models within a unit.", "",
              "## Overall", "",
-             "| Model | Switch F1 | Macro-F1 over pairs | F1 into L2 | F1 into L1 | Duration acc | Duration macro-F1 |",
-             "|---|---:|---:|---:|---:|---:|---:|"]
+             "**Shared F1** is scored only at the last piece of each non-CJK word, positions that "
+             "every tokenizer (and the word model) has in common. It is the fair comparison "
+             "between models with different tokenizers. It is empty for runs made before it "
+             "existed.", "",
+             "| Model | Switch F1 | Macro-F1 over pairs | Shared F1 (non-CJK words) | F1 into L2 | F1 into L1 | Duration acc | Duration macro-F1 |",
+             "|---|---:|---:|---:|---:|---:|---:|---:|"]
     for r in runs:
-        lines.append(f"| {r['label']} | {_f(r['f1'])} | {_f(r['macro_f1'])} | {_f(r['into_l2'])} | "
-                     f"{_f(r['into_l1'])} | {_f(r['dur_acc'])} | {_f(r['dur_macro_f1'])} |")
+        lines.append(f"| {r['label']} | {_f(r['f1'])} | {_f(r['macro_f1'])} | {_f(r['shared_f1'])} | "
+                     f"{_f(r['into_l2'])} | {_f(r['into_l1'])} | {_f(r['dur_acc'])} | "
+                     f"{_f(r['dur_macro_f1'])} |")
     lines += ["", "## Switch F1 by language pair", "",
               "Pairs are sorted from easiest to hardest (mean F1 across the models shown). "
               "**Bold** marks the best model for each pair.", "",
@@ -103,6 +115,16 @@ def to_markdown(runs, table: pd.DataFrame) -> str:
         best = row.max()
         cells = [f"**{v:.3f}**" if v == best else _f(v) for v in row]
         lines.append(f"| {pair} | " + " | ".join(cells) + " |")
+    shared = [r for r in runs if r["shared_per_pair"]]
+    if shared:
+        st = pd.DataFrame({r["label"]: r["shared_per_pair"] for r in shared})
+        lines += ["", "## Shared positions by language pair", "",
+                  "Switch F1 on the last piece of each non-CJK word (the same words for every model).", "",
+                  "| Pair | " + " | ".join(st.columns) + " |", "|---|" + "---:|" * len(st.columns)]
+        for pair, row in st.loc[st.mean(axis=1).sort_values(ascending=False).index].iterrows():
+            best = row.max()
+            lines.append(f"| {pair} | " + " | ".join(f"**{v:.3f}**" if v == best else _f(v)
+                                                     for v in row) + " |")
     spread = table.max(axis=0) - table.min(axis=0)
     lines += ["", "Spread between the easiest and hardest pair: "
               + ", ".join(f"{c} {s:.3f}" for c, s in spread.items()) + "."]

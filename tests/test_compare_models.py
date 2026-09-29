@@ -51,3 +51,16 @@ def test_zero_shot_run_never_collides_with_the_main_run(tmp_path):
     labels = [r["label"] for r in runs]
     assert len(labels) == len(set(labels)) == 3
     assert m.pair_table(runs).loc["Spanish->English", "xlmr (subword)"] == 0.6
+
+
+def test_shared_positions_get_their_own_column_and_table(tmp_path):
+    a, b = tmp_path / "a.json", tmp_path / "b.json"
+    ra = _report({"Spanish->English": 0.6}, 0.4); ra["shared"] = _report({"Spanish->English": 0.55}, 0.4)
+    rb = _report({"Spanish->English": 0.3}, 0.2)                       # an older run: no shared block
+    json.dump(dict(model="roberta", unit="subword", **ra), open(a, "w"))
+    json.dump(dict(model="scratch", unit="word", **rb), open(b, "w"))
+    m = _mod()
+    runs = m.load_runs([str(a), str(b)])
+    assert runs[0]["shared_f1"] == 0.55 and runs[1]["shared_f1"] is None
+    md = m.to_markdown(runs, m.pair_table(runs))
+    assert "Shared F1" in md and "## Shared positions by language pair" in md
