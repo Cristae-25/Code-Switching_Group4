@@ -19,7 +19,9 @@ are closed here:
    ``lang(t+1)``, which IS the label. The two are built from the same array,
    one shifted against the other, so the shift is the only thing standing
    between a legitimate model and a 100% score - ``check_causality`` verifies
-   it empirically rather than by inspection.
+   it empirically rather than by inspection. In sub-word mode there is no
+   language input at all (``use_lang=False``), because at a mid-word piece the
+   word's label depends on pieces not yet read.
 
 ``check_causality`` perturbs every token after position ``t`` and asserts the
 logits at ``t`` are bit-identical. That is a stronger statement than "we set
@@ -37,13 +39,15 @@ class CausalSwitchModel(nn.Module):
     def __init__(self, vocab_size: int, d_model: int = 256, n_layers: int = 4,
                  n_heads: int = 4, d_ff: int = 512, max_len: int = 512,
                  dropout: float = 0.1, n_pairs: int = 16, use_pair: bool = False,
-                 n_dur: int = N_DUR):
+                 use_lang: bool = True, n_dur: int = N_DUR):
         super().__init__()
         self.d_model = d_model
         self.use_pair = use_pair
         self.word_emb = nn.Embedding(vocab_size, d_model, padding_idx=0)
         # 2 real slots + 1 pad slot; the language of the CURRENT token only.
-        self.lang_emb = nn.Embedding(3, d_model)
+        # Sub-word models take no language input (use_lang=False): a word's
+        # label is known only once all of its pieces have been read.
+        self.lang_emb = nn.Embedding(3, d_model) if use_lang else None
         self.pos_emb = nn.Embedding(max_len, d_model)
         self.pair_emb = nn.Embedding(n_pairs, d_model) if use_pair else None
         self.drop = nn.Dropout(dropout)
@@ -59,11 +63,13 @@ class CausalSwitchModel(nn.Module):
         self.head_sw = nn.Linear(d_model, 1)
         self.head_dur = nn.Linear(d_model, n_dur)
 
-    def forward(self, word_ids, lang_ids, pair_id=None):
+    def forward(self, word_ids, lang_ids=None, pair_id=None):
         b, t = word_ids.shape
         pos = torch.arange(t, device=word_ids.device).unsqueeze(0)
-        # lang slot 2 is reserved for padding so pads never look like L1.
-        x = self.word_emb(word_ids) + self.lang_emb(lang_ids) + self.pos_emb(pos)
+        x = self.word_emb(word_ids) + self.pos_emb(pos)
+        if self.lang_emb is not None:
+            # lang slot 2 is reserved for padding so pads never look like L1.
+            x = x + self.lang_emb(lang_ids)
         if self.pair_emb is not None and pair_id is not None:
             x = x + self.pair_emb(pair_id).unsqueeze(1)
         x = self.drop(x)

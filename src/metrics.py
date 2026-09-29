@@ -59,17 +59,35 @@ def macro_f1(per_group: dict[str, dict]) -> float:
     return float(np.mean([g["f1"] for g in per_group.values()])) if per_group else 0.0
 
 
-def duration_scores(y_true, y_pred) -> dict:
-    """Bucketed-duration accuracy, plus off-by-one-bucket tolerance."""
-    y_true, y_pred = np.asarray(y_true), np.asarray(y_pred)
+def duration_scores(y_true, y_pred, n_classes: int = 3) -> dict:
+    """Duration-class accuracy, macro-F1 over classes, confusion (rows = truth)."""
+    y_true = np.asarray(y_true, dtype=np.int64)
+    y_pred = np.asarray(y_pred, dtype=np.int64)
+    conf = np.zeros((n_classes, n_classes), dtype=np.int64)
     if len(y_true) == 0:
-        return dict(n=0, accuracy=0.0, within_one=0.0, mae_buckets=0.0)
+        return dict(n=0, accuracy=0.0, within_one=0.0, macro_f1=0.0,
+                    per_class_f1=[0.0] * n_classes, confusion=conf.tolist())
+    np.add.at(conf, (y_true, y_pred), 1)
+    f1 = []
+    for c in range(n_classes):
+        tp = conf[c, c]
+        fp, fn = conf[:, c].sum() - tp, conf[c, :].sum() - tp
+        f1.append(0.0 if tp == 0 else float(2 * tp / (2 * tp + fp + fn)))
     return dict(
         n=int(len(y_true)),
-        accuracy=float(np.mean(y_true == y_pred)),
+        accuracy=float(np.trace(conf) / len(y_true)),
         within_one=float(np.mean(np.abs(y_true - y_pred) <= 1)),
-        mae_buckets=float(np.mean(np.abs(y_true - y_pred))),
+        macro_f1=float(np.mean(f1)),
+        per_class_f1=f1,
+        confusion=conf.tolist(),
     )
+
+
+def confusion_table(conf, labels) -> str:
+    rows = [dict(true=lab, **{f"pred_{p}": f"{c:,}" for p, c in zip(labels, row)})
+            for lab, row in zip(labels, conf)]
+    return fmt_table(rows, ["true"] + [f"pred_{p}" for p in labels],
+                     "Duration confusion (rows = truth)")
 
 
 def fmt_table(rows: list[dict], cols: list[str], title: str = "") -> str:

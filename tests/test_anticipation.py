@@ -276,3 +276,48 @@ def test_build_subword_vocab_uses_the_train_split_only(tmp_path):
     vocab = build_subword_vocab(path, min_count=2)
     assert "5" in vocab and "6" not in vocab and "7" not in vocab
     assert vocab["<pad>"] == 0 and vocab["<unk>"] == 1
+
+
+# --- model inputs and duration metrics ----------------------------------------
+
+def test_model_without_language_input_ignores_lang_ids():
+    torch = pytest.importorskip("torch")
+    from src.causal_model import CausalSwitchModel
+    m = CausalSwitchModel(200, d_model=32, n_layers=2, n_heads=2, d_ff=64,
+                          use_lang=False).eval()
+    words = torch.randint(3, 200, (1, 16))
+    a = m(words, torch.zeros(1, 16, dtype=torch.long))
+    b = m(words, torch.ones(1, 16, dtype=torch.long))
+    assert m.lang_emb is None
+    assert torch.equal(a[0], b[0]) and torch.equal(a[1], b[1])
+
+
+def test_model_without_language_input_is_causal():
+    pytest.importorskip("torch")
+    from src.causal_model import CausalSwitchModel, check_causality
+    m = CausalSwitchModel(200, d_model=32, n_layers=2, n_heads=2, d_ff=64, use_lang=False)
+    assert check_causality(m, 200, seq_len=24)["max_abs_logit_drift"] == 0.0
+
+
+def test_duration_head_has_three_classes():
+    torch = pytest.importorskip("torch")
+    from src.causal_model import CausalSwitchModel
+    m = CausalSwitchModel(200, d_model=32, n_layers=2, n_heads=2, d_ff=64)
+    _, dur = m(torch.randint(3, 200, (2, 8)), torch.zeros(2, 8, dtype=torch.long))
+    assert dur.shape == (2, 8, 3)
+
+
+def test_duration_scores_three_class():
+    from src.metrics import duration_scores
+    d = duration_scores([0, 0, 1, 2, 2], [0, 1, 1, 2, 0])
+    assert d["confusion"] == [[1, 1, 0], [0, 1, 0], [1, 0, 1]]
+    assert d["accuracy"] == pytest.approx(0.6)
+    assert d["within_one"] == pytest.approx(0.8)
+    assert d["per_class_f1"] == pytest.approx([0.5, 2 / 3, 2 / 3])
+    assert d["macro_f1"] == pytest.approx((0.5 + 2 / 3 + 2 / 3) / 3)
+
+
+def test_duration_scores_empty():
+    from src.metrics import duration_scores
+    d = duration_scores([], [])
+    assert d["n"] == 0 and d["confusion"] == [[0] * 3] * 3
