@@ -204,3 +204,57 @@ def test_write_parquet_round_trips_types(tok, tmp_path):
     back = pd.read_parquet(path)
     assert list(back.piece_lang.iloc[0]) == list(out.piece_lang.iloc[0])
     assert list(back.y_sw.iloc[0]) == list(out.y_sw.iloc[0])
+
+
+# --- other tokenizers: RoBERTa (byte-level BPE) and mBERT (WordPiece) --------
+
+def _load(name):
+    transformers = pytest.importorskip("transformers")
+    try:
+        return transformers.AutoTokenizer.from_pretrained(name, local_files_only=True)
+    except OSError:
+        pytest.skip(f"{name} tokenizer not cached")
+
+
+@pytest.mark.parametrize("name", ["roberta-base", "bert-base-multilingual-cased"])
+def test_other_tokenizers_label_every_piece(name):
+    tk = _load(name)
+    text = "Hola, ¿qué tal? I'm fine. Привет friend"
+    toks = tokenize_mixed(text)
+    labs = ["Spanish" if t in {"Hola", "qué", "tal", "Привет"} else "English" if t.isalpha() else "other"
+            for t in toks]
+    row = subword_row([text], toks, labs, "Spanish", "English", tk)
+    assert row is not None and row["mixed_pieces"] == 0
+    pieces, offs = _pieces(tk, text)
+    spans = align_words([text], toks)
+    char_lang = {}                                   # expected: the language of the word it sits in
+    for (_, a, b), slot in zip(spans, token_slots(toks, labs, "Spanish", "English")):
+        for c in range(a, b):
+            char_lang[c] = None if slot == NONE else slot
+    for p, (s, e), lang in zip(pieces, offs, row["piece_lang"]):
+        got = {char_lang.get(c) for c in range(s, e)} - {None}
+        assert lang == (got.pop() if got else NONE), (name, p, text[s:e])
+
+
+def test_roberta_space_marker_piece_is_none():
+    assert piece_languages([(0, 1)], [True], np.array([L1], dtype=np.int8)) == ([NONE], 0)
+    from src.subword import is_blank
+    assert is_blank("Ġ") and is_blank("▁") and is_blank("Ċ") and not is_blank("Ġfine") and not is_blank("##la")
+
+
+# --- word ends: the positions shared by every tokenizer ------------------------
+
+@pytest.mark.parametrize("name", ["xlm-roberta-base", "roberta-base", "bert-base-multilingual-cased"])
+def test_word_end_marks_the_last_piece_of_each_non_cjk_word(name):
+    tk = _load(name)
+    text = "Hola amigo, 你好 friend"
+    toks = tokenize_mixed(text)                      # Hola amigo , 你 好 friend
+    labs = ["Spanish", "Spanish", "other", "Chinese", "Chinese", "English"]
+    row = subword_row([text], toks, labs, "Spanish", "English", tk)
+    pieces, offs = _pieces(tk, text)
+    ends = [text[s:e] for (s, e), f in zip(offs, row["word_end"]) if f]
+    assert [x.strip() for x in ends] == ["o", "o", "d"] or len(ends) == 3, (name, ends)
+    assert sum(row["word_end"]) == 3                  # Hola, amigo, friend - not the CJK characters
+    last = [max(i for i, (s, e) in enumerate(offs) if s < b and a < e)
+            for a, b in [(0, 4), (5, 10), (17, 23)]]
+    assert [i for i, f in enumerate(row["word_end"]) if f] == last
