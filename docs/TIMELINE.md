@@ -60,5 +60,5 @@ Status key: ✅ done · 🟡 partial / done differently · ⬜ not started
 - **Baselines** (test split, best training-free):
   - Switch F1 is **0.295** on words, unchanged, and **0.235** on pieces.
   - The mode-per-direction duration baseline gets 0.585 accuracy on words and 0.509 on pieces.
-- **Smoke test:** a 400-step sub-word model already reaches switch F1 0.259, and passes the causality check.
+- **Smoke test:** a 400-step sub-word model trains and passes the causality check. Its switch F1 of 0.259 is on only 7% of the test split, so it is not yet comparable with the baselines.
 - **Next (Week 5):** the XLM-R backbone with a causal mask, trained on a Kaggle GPU.

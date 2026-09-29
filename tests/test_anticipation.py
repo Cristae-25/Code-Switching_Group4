@@ -321,3 +321,43 @@ def test_duration_scores_empty():
     from src.metrics import duration_scores
     d = duration_scores([], [])
     assert d["n"] == 0 and d["confusion"] == [[0] * 3] * 3
+
+
+# --- training-script defaults ---------------------------------------------------
+
+def _train_script():
+    import importlib.util, os
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    spec = importlib.util.spec_from_file_location(
+        "train_anticipation", os.path.join(root, "scripts", "train_anticipation.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def _args(**kw):
+    import argparse
+    base = dict(unit="word", path=None, window=None, stride=None, vocab_size=None,
+                out=None, ckpt=None, names="script_words", no_lang=False)
+    return argparse.Namespace(**{**base, **kw})
+
+
+def test_subword_training_never_overwrites_the_word_model_by_default():
+    mod = _train_script()
+    word, sub = mod.resolve_defaults(_args()), mod.resolve_defaults(_args(unit="subword"))
+    assert word.ckpt == "models/anticipation_causal.pt"
+    assert word.out == "data/anticipation_model.json"
+    assert sub.ckpt != word.ckpt and sub.out != word.out
+    assert (sub.window, sub.stride, sub.path) == (384, 288, "data/subword.parquet")
+
+
+def test_explicit_outputs_are_kept():
+    mod = _train_script()
+    a = mod.resolve_defaults(_args(unit="subword", ckpt="x.pt", out="x.json", window=128))
+    assert (a.ckpt, a.out, a.window) == ("x.pt", "x.json", 128)
+
+
+def test_names_policy_is_rejected_for_subword_units():
+    mod = _train_script()
+    with pytest.raises(SystemExit):
+        mod.resolve_defaults(_args(unit="subword", names="transparent"))

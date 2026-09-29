@@ -707,7 +707,7 @@ Three readings:
 
 - **Pieces are harder for the rules.** A word split into several pieces adds "no switch" positions in the middle of the word, and `naive_l2` then fires on every English piece instead of every English word, so its precision drops from 0.189 to 0.147. The finding from §4.3 holds at both units: the run-length hazard still scores **0.000** on switching *into* the second language.
 - **Large dominates on pieces.** Counting in pieces lengthens runs, so the most common class in both directions becomes Large, and the mode baseline predicts Large everywhere (macro-F1 0.225). On words, switches into L2 are most often Small (a one- or two-word insertion) and switches back into L1 most often Large, the same asymmetry as §4.4.
-- **The pipeline works end to end.** A 400-step sub-word smoke run, with pieces only and no language input, passes the causality check at 0.00e+00 drift and already reaches switch F1 0.259 on test, above the piece-level hazard baseline. It is a smoke test, not a result: the full runs, and the XLM-R backbone, come next.
+- **The pipeline works end to end.** A 400-step sub-word smoke run, with pieces only and no language input, passes the causality check at 0.00e+00 drift, and reaches switch F1 0.259. That figure is on only the first 50 test batches (124,800 positions, about 7% of the split, 57% of them Cantonese), with the threshold tuned on 50 validation batches, so it is **not** comparable with the full-split baseline above. It shows the pipeline trains; the full runs, and the XLM-R backbone, come next.
 
 ## 5. Next Steps — challenges with sub-word tokenization and Language-ID→segment mapping
 

@@ -29,8 +29,26 @@ from src.metrics import by_group, confusion_table, duration_scores, fmt_table, m
 from src.streaming import (DEFAULT_PATHS, VOCAB_PATHS, build_subword_vocab,  # noqa: E402
                            build_vocab, make_loader)
 
-UNIT_DEFAULTS = {"word": dict(window=256, stride=192, vocab_size=50_000),
-                 "subword": dict(window=384, stride=288, vocab_size=100_000)}
+UNIT_DEFAULTS = {"word": dict(window=256, stride=192, vocab_size=50_000,
+                              out="data/anticipation_model.json",
+                              ckpt="models/anticipation_causal.pt"),
+                 "subword": dict(window=384, stride=288, vocab_size=100_000,
+                                 out="data/anticipation_model_subword.json",
+                                 ckpt="models/anticipation_subword.pt")}
+
+
+def resolve_defaults(args):
+    """Fill unit-dependent defaults, so a sub-word run never overwrites the word model."""
+    for k, v in UNIT_DEFAULTS[args.unit].items():
+        if getattr(args, k) is None:
+            setattr(args, k, v)
+    if args.path is None:
+        args.path = DEFAULT_PATHS[args.unit]
+    if args.unit == "subword" and args.names != "script_words":
+        # data/subword.parquet was built with the default names policy baked in.
+        raise SystemExit("--names only applies to --unit word: the sub-word labels were "
+                         "built with script_words (use kaggle/load_labels.ipynb for others)")
+    return args
 PAIRS = ["Cantonese", "Arabic", "Philippines", "German", "Chinese", "Vietnamese",
          "Malay", "Japanese", "Hindi", "Korean", "Spanish", "French", "Russian",
          "Italian"]
@@ -100,9 +118,9 @@ def main() -> None:
                          "held-out pair the model has never seen")
     ap.add_argument("--unit", choices=["word", "subword"], default="word")
     ap.add_argument("--no-lang", action="store_true",
-                    help="no language input (always on for --unit subword)")
-    ap.add_argument("--out", default="data/anticipation_model.json")
-    ap.add_argument("--ckpt", default="models/anticipation_causal.pt")
+                    help="no language input (implied by --unit subword)")
+    ap.add_argument("--out", default=None, help="default depends on --unit")
+    ap.add_argument("--ckpt", default=None, help="default depends on --unit")
     ap.add_argument("--names", choices=["script_words", "transparent", "script", "hybrid", "language"],
                     default="script_words",
                     help="how named entities count (see src/segments.py); needs an "
@@ -110,11 +128,7 @@ def main() -> None:
     args = ap.parse_args()
     import src.anticipation as _ant
     _ant.NAMES = args.names
-    for k, v in UNIT_DEFAULTS[args.unit].items():
-        if getattr(args, k) is None:
-            setattr(args, k, v)
-    if args.path is None:
-        args.path = DEFAULT_PATHS[args.unit]
+    resolve_defaults(args)
     vocab_path = VOCAB_PATHS[args.unit]
     use_lang = not (args.no_lang or args.unit == "subword")
 

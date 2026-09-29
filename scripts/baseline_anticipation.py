@@ -129,6 +129,9 @@ def main() -> None:
     import src.anticipation as _ant
     _ant.NAMES = args.names
     args.path = args.path or DEFAULT_PATHS[args.unit]
+    if args.unit == "subword" and args.names != "script_words":
+        raise SystemExit("--names only applies to --unit word: the sub-word labels were "
+                         "built with script_words")
     args.json = args.json or ("data/baseline_anticipation.json" if args.unit == "word"
                               else "data/baseline_anticipation_subword.json")
     print(f"unit {args.unit} | {args.path}")
