@@ -169,7 +169,8 @@ for f in (f"data/anticipation_{MODEL}.json", f"data/anticipation_{MODEL}_zerosho
     r = json.load(open(f))
     o, d = r["overall"], r["duration"]
     sh = r.get("shared", {}).get("overall", {}).get("f1", float("nan"))
-    print(f"== {f}\n  switch F1 {o['f1']:.3f} (P {o['precision']:.3f}, R {o['recall']:.3f}) | "
+    print(f"== {f}")
+    print(f"  switch F1 {o['f1']:.3f} (P {o['precision']:.3f}, R {o['recall']:.3f}) | "
           f"macro-F1 {r['macro_f1']:.3f} | shared F1 {sh:.3f}")
     print("  by direction:", {k: round(v["f1"], 3) for k, v in r["per_direction"].items()})
     print(f"  duration: 3-class accuracy {d['accuracy']:.3f} | macro-F1 {d['macro_f1']:.3f}")
