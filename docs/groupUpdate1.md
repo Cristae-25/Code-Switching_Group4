@@ -61,9 +61,9 @@ validation.
 | *XLM-R pieces, same test conversations (§4.8):* | | |
 | best training-free (per-pair hazard), pieces | 0.266 | 0.259 |
 | from-scratch causal transformer, pieces | 0.453 | 0.453 |
-| **XLM-R + causal mask (278 M params, ~1 epoch), pieces** | **0.647** | **0.677** |
+| **XLM-R + causal mask (278 M params, ~1 epoch), pieces** | **0.646** | **0.676** |
 
-**Update (2026-09-29): pretrained XLM-R with a causal mask** reaches switch F1 **0.647** and macro-F1 **0.677** on XLM-R pieces. That is better than the from-scratch model on **all 15 pairs** (+0.15 to +0.27), with four pairs above 0.7: Korean 0.809, German→English 0.735, Japanese 0.734, Hindi 0.717. The details are in §4.8 and `docs/results/2026-09-29_xlmr_causal.md`. Word and piece rows are different units, so compare within a unit.
+**Update (2026-09-29): pretrained XLM-R with a causal mask** reaches switch F1 **0.646** and macro-F1 **0.676** on XLM-R pieces. That is better than the from-scratch model on **all 15 pairs** (+0.15 to +0.27), with four pairs above 0.7: Korean 0.808, Japanese 0.736, German→English 0.733, Hindi 0.715. On the hard direction, switching *into* L2, F1 rises from 0.356 to 0.536. Duration accuracy is 0.678 (macro-F1 0.575). Two independent runs agree within ±0.004 per pair. The details are in §4.8 and `docs/results/2026-09-29_xlmr_causal.md`. Word and piece rows are different units, so compare within a unit.
 
 The naive one-bit model reaches 0.267 because second-language runs are short
 (median 2 tokens). Its ceiling is structural, and the hazard table shows why:
@@ -107,7 +107,7 @@ Hindi–English suggests is mostly genuine insertion style, not error.
 | 1. Objectives & language selection | §1 | All 15 pairs; universality tested by **holding 4 pairs out of training entirely** — zero-shot **F1 0.383**, above every training-free baseline (§1.4, §4.5) |
 | 2. Data engineering | §2 | Streaming `IterableDataset`, **175 MB peak RSS** on a 22.3 M-token corpus; `y_sw`/`y_dur` derived, not annotated; caught and fixed an **unintended language curriculum** in the file order |
 | 3. Causal constraints | §3 | Additive `-inf` mask + `is_causal`; **verified empirically at 0.00e+00 logit drift**, and the test is shown to fail on a bidirectional model |
-| 4. Baseline metrics | §4 | Naive "current token is L2" → **F1 0.267**. Best training-free → **0.295**. Causal transformer → **0.503**; zero-shot **0.383** (§4.5). **XLM-R + causal mask → 0.647 on pieces, 4 pairs above 0.7 (§4.8)** |
+| 4. Baseline metrics | §4 | Naive "current token is L2" → **F1 0.267**. Best training-free → **0.295**. Causal transformer → **0.503**; zero-shot **0.383** (§4.5). **XLM-R + causal mask → 0.646 on pieces, 4 pairs above 0.7 (§4.8)** |
 | 5. Next steps | §5 | Two real blockers: **CJK tokens are characters, not words**, and **only 1 of 15 pairs has a non-English L2**. Latin-pair label noise, the third, is largely fixed by AnE-LID (§5.2) |
 
 Everything below is reproducible from this repo; commands are in §6.
@@ -738,26 +738,34 @@ It was fine-tuned for about one epoch on Kaggle (T4): 12,000 steps at batch 16, 
 |---|---:|---:|---:|---|
 | Hazard, per pair | 0.266 | 0.259 | 0 | French 0.208 |
 | From-scratch transformer | 0.453 | 0.453 | 0 | Russian, German→French 0.387 |
-| **XLM-R + causal mask** | **0.647** | **0.677** | **4** | Malay 0.549 |
+| **XLM-R + causal mask** | **0.646** | **0.676** | **4** | Malay 0.548 |
 
 | Pair | XLM-R | vs. from-scratch | Pair | XLM-R | vs. from-scratch |
 |---|---:|---:|---|---:|---:|
-| Korean | **0.809** | +0.198 | Arabic | 0.667 | +0.255 |
-| German→English | **0.735** | +0.266 | Russian | 0.661 | +0.274 |
-| Japanese | **0.734** | +0.207 | German→French | 0.661 | +0.274 |
-| Hindi | **0.717** | +0.176 | Tagalog | 0.639 | +0.147 |
-| French | 0.698 | +0.245 | Vietnamese | 0.622 | +0.211 |
-| Chinese | 0.698 | +0.269 | Cantonese | 0.621 | +0.179 |
-| Italian | 0.675 | +0.269 | Malay | 0.549 | +0.152 |
-| Spanish | 0.671 | +0.246 | | | |
+| Korean | **0.808** | +0.197 | Arabic | 0.664 | +0.252 |
+| Japanese | **0.736** | +0.209 | Russian | 0.659 | +0.272 |
+| German→English | **0.733** | +0.264 | German→French | 0.658 | +0.271 |
+| Hindi | **0.715** | +0.174 | Tagalog | 0.638 | +0.146 |
+| Chinese | 0.699 | +0.270 | Vietnamese | 0.622 | +0.211 |
+| French | 0.695 | +0.242 | Cantonese | 0.619 | +0.177 |
+| Spanish | 0.673 | +0.248 | Malay | 0.548 | +0.151 |
+| Italian | 0.671 | +0.265 | | | |
 
-The overall F1 was rebuilt from the per-pair precision and recall and each pair's true switch count (error under ±0.002). The exact figure, the per-direction scores and the duration results are in the run's `data/anticipation_xlmr.json`.
+| Also (pieces) | From-scratch | **XLM-R** |
+|---|---:|---:|
+| F1 switching into L2 / back into L1 | 0.356 / 0.560 | **0.536 / 0.759** |
+| Duration: 3-class accuracy / macro-F1 | 0.636 / 0.482 | **0.678 / 0.575** |
+| Duration F1: Small / Medium / Large | 0.591 / 0.079 / 0.776 | 0.636 / **0.278** / 0.813 |
+
+These are exact figures from `docs/results/2026-09-29_xlmr_causal.json`. A second, independent training with the same settings agrees within ±0.004 F1 on every pair.
 
 **Readings.**
 - **Pretraining is the biggest single gain in the project.** It adds about +0.2 F1 to every pair. §5.3 item 6 predicted that multilingual lexical knowledge is what the from-scratch model lacks for anticipating a switch; this confirms it.
-- **Macro-F1 is above micro-F1 (0.677 vs 0.647).** Cantonese, half the test positions, is one of the weaker pairs (0.621). The model is better on the typical pair than on the largest one.
+- **Both switch directions gain about +0.2.** The one that matters for anticipation, switching *into* L2, rises from 0.356 to 0.536. That is the direction where run length carries little signal (§4.3).
+- **Duration improves; Medium stays hardest** (F1 0.079 → 0.278). Most Medium runs are still predicted Large or Small. A class-weighted duration loss is the next experiment.
+- **Macro-F1 is above micro-F1 (0.676 vs 0.646).** Cantonese, half the test positions, is one of the weaker pairs (0.619). The model is better on the typical pair than on the largest one.
 - **The hardest pairs are the ones that switch mid-clause:** Malay, Cantonese, Vietnamese and Tagalog. The EDA (`notebooks/switch_eda.ipynb` §2c) shows these rarely switch at punctuation, so there is less of a clause-boundary cue.
-- **German→French rises to 0.661** (+0.274, tied for the largest gain). It was trained on here, so this says nothing yet about the zero-shot question (§4.5, §5.3 item 2). That needs the XLM-R zero-shot run.
+- **German→French rises to 0.658** (+0.271, among the largest gains). It was trained on here, so this says nothing yet about the zero-shot question (§4.5, §5.3 item 2). That needs the XLM-R zero-shot run.
 
 ## 5. Next Steps — challenges with sub-word tokenization and Language-ID→segment mapping
 
@@ -940,7 +948,7 @@ as the script-exact ones.
    `requirements.txt`) so run lengths are in comparable units. This changes
    `y_dur` for 51% of the corpus and is the prerequisite for any cross-language
    duration claim.
-6. **Scale the causal model.** *Done 2026-09-29 (§4.8): causal XLM-R reaches 0.647 on pieces, against 0.453 from scratch.* The §4.5 baseline is a from-scratch 15 M-parameter
+6. **Scale the causal model.** *Done 2026-09-29 (§4.8): causal XLM-R reaches 0.646 on pieces, against 0.453 from scratch.* The §4.5 baseline is a from-scratch 15 M-parameter
    transformer trained for **1.02 epochs** — it reaches F1 0.503 knowing nothing
    about any language beyond what 192,000 windows taught it. A pretrained causal
    LM (or a causally-masked XLM-R) starts with exactly the multilingual lexical

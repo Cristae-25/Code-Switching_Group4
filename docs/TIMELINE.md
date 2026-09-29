@@ -8,7 +8,7 @@ Status key: ✅ done · 🟡 partial / done differently · ⬜ not started
 |---|---|---|---|
 | 3 | Sep 21 – Sep 27 | Acquire SwitchLingua dataset, review language-pair selection | ✅ all 15 pairs, 4 held out (`groupUpdate1.md` §1) |
 | 4 | Sep 28 – Oct 4 | Sub-word tokenization & LID mapping, generate switch and duration labels, build streaming dataloaders | ✅ LID mapping, final per-token labels (AnE-LID, `script_words` names; private HF `cristae/switchlingua-tagged-final`), **sub-word labels** (XLM-R pieces with per-piece language, switch, integer duration and the 3 required classes), and **streaming dataloaders for both units** (`src/streaming.py`, `--unit subword`: 384-piece windows, no language input). Piece-level baselines in `docs/groupUpdate1.md` §4.6 |
-| 5 | Oct 5 – Oct 11 | Multilingual backbone setup (XLM-R / mBERT), implement causal attention mask | 🟡 **XLM-R backbone with a causal mask built** (`src/xlmr_model.py`, `is_decoder=True`, `check_causality` passes at 0.00 drift on the real model) and **trained on Kaggle (2026-09-29): switch F1 0.647 on pieces, macro-F1 0.677, 4 pairs above 0.7** (`docs/results/2026-09-29_xlmr_causal.md`). mBERT dropped: its tokenizer doesn't match the sub-word labels and gives 2.8% UNK on Cantonese |
+| 5 | Oct 5 – Oct 11 | Multilingual backbone setup (XLM-R / mBERT), implement causal attention mask | 🟡 **XLM-R backbone with a causal mask built** (`src/xlmr_model.py`, `is_decoder=True`, `check_causality` passes at 0.00 drift on the real model) and **trained on Kaggle (2026-09-29): switch F1 0.646 on pieces, macro-F1 0.676, 4 pairs above 0.7** (`docs/results/2026-09-29_xlmr_causal.md`). mBERT dropped: its tokenizer doesn't match the sub-word labels and gives 2.8% UNK on Cantonese |
 | 6 | Oct 12 – Oct 18 | Build dual-task heads (switch & duration) | ✅ `head_sw` / `head_dur` in `src/causal_model.py` |
 | 7 | Oct 19 – Oct 25 | Implement multitask loss, verify gradient flow & end-to-end unit testing | 🟡 Multitask loss (`--dur-weight`) and end-to-end tests are done. There is no explicit gradient-flow test yet |
 | 8 | Oct 26 – Nov 1 | Train baseline models on 1–2 language pairs | ✅ exceeded: baselines run on all pairs; rerun on the final labels 2026-09-27 |
@@ -75,12 +75,12 @@ Status key: ✅ done · 🟡 partial / done differently · ⬜ not started
 ## Update — 2026-09-29 (XLM-R trained)
 
 - **XLM-R + causal mask**, about 1 epoch on a Kaggle T4:
-  - Switch F1 **0.647** on pieces and macro-F1 **0.677**, against 0.453 for the from-scratch model and 0.266 for the per-pair hazard.
+  - Switch F1 **0.646** on pieces and macro-F1 **0.676**, against 0.453 for the from-scratch model and 0.266 for the per-pair hazard. Into L2: 0.536. Duration accuracy 0.678, macro-F1 0.575.
   - Better on all 15 pairs (+0.15 to +0.27). Korean, German→English, Japanese and Hindi are above 0.7.
   - Archived in `docs/results/`.
 - **Week 5 milestone met** (a multilingual backbone with a causal mask). Weeks 6–8 are covered too: dual heads, multitask loss, baselines.
 - **Still to run:**
-  1. Download `data/anticipation_xlmr.json` for the duration and per-direction results.
+  1. ~~Download `data/anticipation_xlmr.json`~~ Done: duration and per-direction are in the results. Two independent runs agree within ±0.004 per pair.
   2. The XLM-R zero-shot run.
   3. The from-scratch zero-shot rerun with the new report, as its comparison.
   4. Seeds for the variance analysis (Week 12).

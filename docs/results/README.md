@@ -4,7 +4,7 @@ One dated file per training run whose numbers we report, plus the raw tables exa
 
 | Date | Run | Headline | Files |
 |---|---|---|---|
-| 2026-09-29 | XLM-R + causal mask, all 15 pairs, sub-word (Kaggle T4) | switch F1 0.647 (rebuilt from per-pair counts), macro-F1 0.677; 4 pairs above 0.7; better than the from-scratch model on every pair (+0.23 mean) | [record](2026-09-29_xlmr_causal.md), [per-pair CSV](2026-09-29_xlmr_causal_per_pair.csv) |
+| 2026-09-29 | XLM-R + causal mask, all 15 pairs, sub-word (Kaggle T4), 2 independent runs | switch F1 **0.646**, macro-F1 0.676, into L2 0.536; duration accuracy 0.678 / macro-F1 0.575; 4 pairs above 0.7; better than the from-scratch model on every pair (+0.22 mean); the two runs agree within ±0.004 per pair | [record](2026-09-29_xlmr_causal.md), [results JSON](2026-09-29_xlmr_causal.json), [run 2 per-pair CSV](2026-09-29_xlmr_causal_run2_per_pair.csv) |
 | 2026-09-28 | Baselines (pooled and per-pair hazard) and the from-scratch transformer, words and pieces | from-scratch 0.513 (words) / 0.453 (pieces); per-pair hazard 0.329 / 0.266 | [`../model_comparison.md`](../model_comparison.md) |
 
 Every run uses the same protocol: a row-level 80/10/10 split (`row_id % 10`), the threshold tuned on val, test scored once, and `src/evaluation.py` for the metrics.
