@@ -685,6 +685,30 @@ problem, not a model problem.
 
 ---
 
+### 4.6 Sub-word units and 3-class duration: training-free baselines
+
+The same training-free baselines, rerun (2026-09-28) with the 3 required duration classes (Small 1–2, Medium 3–6, Large 7+), on words and on XLM-R pieces. Test split; the pieces' labels are built as in §5.1.
+
+| Switch (`y_sw`) | Words: P / R / **F1** | Pieces: P / R / **F1** |
+|---|---|---|
+| `always` | 0.098 / 1.000 / 0.178 | 0.104 / 1.000 / 0.188 |
+| `naive_l2` | 0.189 / 0.457 / 0.267 | 0.147 / 0.457 / 0.222 |
+| `hazard@tuned` | 0.254 / 0.352 / **0.295** | 0.180 / 0.338 / **0.235** |
+| hazard on L1→L2 | F1 0.000 | F1 0.000 |
+
+| Duration (oracle switch positions) | Words | Pieces |
+|---|---|---|
+| Scored switches (class certain) | 179,741 | 180,990 |
+| Mode per direction: 3-class accuracy | 0.585 | 0.509 |
+| … macro-F1 over the classes | 0.428 | 0.225 |
+| … within one class | 0.766 | 0.732 |
+
+Three readings:
+
+- **Pieces are harder for the rules.** A word split into several pieces adds "no switch" positions in the middle of the word, and `naive_l2` then fires on every English piece instead of every English word, so its precision drops from 0.189 to 0.147. The finding from §4.3 holds at both units: the run-length hazard still scores **0.000** on switching *into* the second language.
+- **Large dominates on pieces.** Counting in pieces lengthens runs, so the most common class in both directions becomes Large, and the mode baseline predicts Large everywhere (macro-F1 0.225). On words, switches into L2 are most often Small (a one- or two-word insertion) and switches back into L1 most often Large, the same asymmetry as §4.4.
+- **The pipeline works end to end.** A 400-step sub-word smoke run, with pieces only and no language input, passes the causality check at 0.00e+00 drift and already reaches switch F1 0.259 on test, above the piece-level hazard baseline. It is a smoke test, not a result: the full runs, and the XLM-R backbone, come next.
+
 ## 5. Next Steps — challenges with sub-word tokenization and Language-ID→segment mapping
 
 ### 5.1 Tokenization: the unit is not the same across languages

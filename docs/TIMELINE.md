@@ -7,7 +7,7 @@ Status key: ✅ done · 🟡 partial / done differently · ⬜ not started
 | Week | Dates | Milestone | Status |
 |---|---|---|---|
 | 3 | Sep 21 – Sep 27 | Acquire SwitchLingua dataset, review language-pair selection | ✅ all 15 pairs, 4 held out (`groupUpdate1.md` §1) |
-| 4 | Sep 28 – Oct 4 | Sub-word tokenization & LID mapping, generate switch and duration labels, build streaming dataloaders | 🟡 LID mapping, final per-token labels (AnE-LID, `script_words` names; private HF `cristae/switchlingua-tagged-final`), dataloaders (`src/streaming.py`), and **sub-word labels**: XLM-R pieces with per-piece language, switch, integer duration and the 3 required classes (`data/subword.parquet`, `scripts/build_subword.py`). Training on sub-words is Week 5 |
+| 4 | Sep 28 – Oct 4 | Sub-word tokenization & LID mapping, generate switch and duration labels, build streaming dataloaders | ✅ LID mapping, final per-token labels (AnE-LID, `script_words` names; private HF `cristae/switchlingua-tagged-final`), **sub-word labels** (XLM-R pieces with per-piece language, switch, integer duration and the 3 required classes), and **streaming dataloaders for both units** (`src/streaming.py`, `--unit subword`: 384-piece windows, no language input). Piece-level baselines in `docs/groupUpdate1.md` §4.6 |
 | 5 | Oct 5 – Oct 11 | Multilingual backbone setup (XLM-R / mBERT), implement causal attention mask | 🟡 Causal mask and `check_causality` are done. The anticipation model is a from-scratch transformer; XLM-R and mBERT are used only for LID tagging, not as the backbone yet |
 | 6 | Oct 12 – Oct 18 | Build dual-task heads (switch & duration) | ✅ `head_sw` / `head_dur` in `src/causal_model.py` |
 | 7 | Oct 19 – Oct 25 | Implement multitask loss, verify gradient flow & end-to-end unit testing | 🟡 Multitask loss (`--dur-weight`) and end-to-end tests are done. There is no explicit gradient-flow test yet |
@@ -52,3 +52,13 @@ Status key: ✅ done · 🟡 partial / done differently · ⬜ not started
 - **Switch labels:** 18,211,198 scored pieces and 1,896,074 switches (10.41%). That is within 4 of the word-level switch count, so the language boundaries carried over intact.
 - **Duration labels:** now the professor's 3 classes, stored as integers. Among runs whose class is known: Small 26.8%, Medium 22.3%, Large 50.9%. That includes 145,049 cut-off runs of 7+; counting closed runs only, the split is 29.1% / 24.3% / 46.6%.
 - **Next (Week 5):** stream the sub-word labels into a model with the XLM-R backbone.
+
+## Update — 2026-09-28 (Week 4 complete)
+
+- **Sub-word loader:** `SwitchWindowDataset(unit="subword")` streams `data/subword.parquet` in 384-piece windows (XLM-R's limit is 512). The model gets no language input on pieces (`CausalSwitchModel(use_lang=False)`). The scripts take `--unit subword`, and `--no-lang` for a fair word-level comparison.
+- **Duration** is scored in the 3 required classes: accuracy, macro-F1 and a confusion matrix.
+- **Baselines** (test split, best training-free):
+  - Switch F1 is **0.295** on words, unchanged, and **0.235** on pieces.
+  - The mode-per-direction duration baseline gets 0.585 accuracy on words and 0.509 on pieces.
+- **Smoke test:** a 400-step sub-word model already reaches switch F1 0.259, and passes the causality check.
+- **Next (Week 5):** the XLM-R backbone with a causal mask, trained on a Kaggle GPU.

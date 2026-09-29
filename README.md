@@ -112,10 +112,12 @@ piece          lang  y_sw  y_len  y_dur
 ## Common commands
 
 ```bash
-./.venv/bin/python -m pytest tests/ -q                   # 232 tests
+./.venv/bin/python -m pytest tests/ -q                   # 244 tests
 ./.venv/bin/python scripts/shuffle_parquet.py            # -> data/tagged_shuffled.parquet (train on this)
 ./.venv/bin/python scripts/baseline_anticipation.py      # training-free baselines, ~4 min
 ./.venv/bin/python scripts/train_anticipation.py --build-vocab --path data/tagged_shuffled.parquet --steps 6000   # ~23 min on an M3
+./.venv/bin/python scripts/baseline_anticipation.py --unit subword                    # the same baselines on XLM-R pieces
+./.venv/bin/python scripts/train_anticipation.py --unit subword --build-vocab --steps 6000   # pieces only, no language input (~35 min)
 ./.venv/bin/python scripts/eval_anticipation_pair.py --ckpt models/anticipation_zeroshot.pt --l1 German --l2 French
 ./.venv/bin/python scripts/eval_public.py                # taggers vs human-annotated LinCE / Denglisch
 ./.venv/bin/python scripts/review_server.py              # spot-check UI for the labels (report-only)
