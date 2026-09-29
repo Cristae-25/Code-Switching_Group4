@@ -13,8 +13,8 @@ Can a model predict that a speaker is **about to switch language** before it hap
 |---|---|
 | Per-word language labels for the whole corpus | ✅ done (AnE-LID / script / dictionary, with names resolved by context) |
 | Sub-word (XLM-R token) labels: language, switch, duration | ✅ done (`data/subword.parquet`) |
-| Word-level causal transformer + baselines | ✅ done: switch F1 **0.503** vs 0.295 for the best training-free baseline; **0.383** zero-shot on 4 held-out pairs |
-| Pretrained backbone (XLM-R) on sub-word labels | ⬜ next (Week 5) |
+| Baselines + from-scratch causal transformer, words and pieces | ✅ done: switch F1 **0.513** (words) / **0.453** (pieces), against 0.329 / 0.266 for the best training-free baseline (per-pair hazard). See [`docs/model_comparison.md`](docs/model_comparison.md) |
+| XLM-R with a causal mask | 🟡 built and checked causal; the full training run is on Kaggle (`kaggle/train_xlmr.ipynb`) |
 
 The course schedule and pace are in [`docs/TIMELINE.md`](docs/TIMELINE.md).
 
@@ -112,18 +112,44 @@ piece          lang  y_sw  y_len  y_dur
 ## Common commands
 
 ```bash
-./.venv/bin/python -m pytest tests/ -q                   # 244 tests
+./.venv/bin/python -m pytest tests/ -q                   # 266 tests
 ./.venv/bin/python scripts/shuffle_parquet.py            # -> data/tagged_shuffled.parquet (train on this)
 ./.venv/bin/python scripts/baseline_anticipation.py      # training-free baselines, ~4 min
 ./.venv/bin/python scripts/train_anticipation.py --build-vocab --path data/tagged_shuffled.parquet --steps 6000   # ~23 min on an M3
 ./.venv/bin/python scripts/baseline_anticipation.py --unit subword                    # the same baselines on XLM-R pieces
 ./.venv/bin/python scripts/train_anticipation.py --unit subword --build-vocab --steps 6000   # pieces only, no language input (~35 min)
+./.venv/bin/python scripts/train_anticipation.py --model xlmr --unit subword --steps 12000 --batch-size 16  # GPU: use kaggle/train_xlmr.ipynb
+./.venv/bin/python scripts/compare_models.py                                         # -> docs/model_comparison.md
 ./.venv/bin/python scripts/eval_anticipation_pair.py --ckpt models/anticipation_zeroshot.pt --l1 German --l2 French
 ./.venv/bin/python scripts/eval_public.py                # taggers vs human-annotated LinCE / Denglisch
 ./.venv/bin/python scripts/review_server.py              # spot-check UI for the labels (report-only)
 ```
 
 Re-labelling the corpus from scratch needs a GPU (the AnE-NER and AnE-LID passes). Use `kaggle/label_switchlingua.ipynb` (T4×2). Locally, `scripts/run_tagging.py` does the same thing but slowly. After changing `src/`, regenerate the notebooks with `scripts/build_kaggle_notebook.py` and `scripts/build_labels_notebook.py`.
+
+## How models are evaluated
+
+Every model is trained and scored the same way, so the results are directly comparable:
+
+1. **Split.** Train on the train split (80% of conversations, by `row_id % 10`). Tune the switch threshold on val (10%). Score test (10%) once. A conversation never straddles two splits.
+2. **Causal reading.** A model reads each conversation left to right. At every token it may use only the tokens so far; the causal mask enforces this, and `check_causality` must pass before any training starts.
+3. **The report** (`src/evaluation.py`):
+   - Switch precision, recall and F1, with 95% intervals. Overall, **per language pair** (German→French kept apart), macro-averaged across pairs, and **per direction** (into L2 vs back into L1).
+   - Duration: 3-class accuracy, macro-F1 and a confusion matrix, at the true switch points whose class is certain.
+4. **Compare.** `scripts/compare_models.py` puts every result file side by side, overall and pair by pair → [`docs/model_comparison.md`](docs/model_comparison.md).
+
+| Baseline | What it knows |
+|---|---|
+| never / always / random at the base rate | nothing (sanity checks) |
+| `naive_l2` | "switch iff the current token is L2" |
+| hazard (pooled / **per pair**) | P(switch \| current language, how long it has lasted), fitted on train |
+| from-scratch causal transformer | a 15 M-parameter model trained on our labels only |
+| **XLM-R + causal mask** | a pretrained multilingual model, fine-tuned (the target) |
+
+**Training XLM-R on Kaggle.**
+1. Upload `kaggle/train_xlmr.ipynb`, choose GPU T4 ×2, turn Internet on, and add the `HF_TOKEN` secret.
+2. Run All. Try `SMOKE = True` first.
+3. Download `data/anticipation_xlmr.json` from the Output tab into `data/`, then run `./.venv/bin/python scripts/compare_models.py`.
 
 ## Repo layout
 
@@ -137,9 +163,12 @@ src/          library code
   token_labels.py                                  the shared per-token label files (lang, y_sw, y_len, y_dur)
   anticipation.py                                  y_sw / y_len / y_dur label building
   streaming.py, causal_model.py, metrics.py        dataloader, causal transformer, metrics
+  xlmr_model.py, models.py                         XLM-R with a causal mask; build either model
+  evaluation.py                                    the one evaluation report every model uses
 scripts/      command-line entry points (see "Common commands")
 tests/        pytest suite; fixtures/ holds frozen model outputs for the name edge cases
 kaggle/       load_labels.ipynb: download our labels, choose word/sub-word + names policy (CPU)
+              train_xlmr.ipynb: fine-tune and evaluate causal XLM-R (GPU)
               label_switchlingua.ipynb: re-label the corpus from scratch (GPU, T4x2)
 notebooks/    switch_eda.ipynb: when switches happen and how long they last, by pair and persona
 docs/         write-ups (start here)

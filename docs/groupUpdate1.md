@@ -711,6 +711,15 @@ Three readings:
 - **Large dominates on pieces.** Counting in pieces lengthens runs, so the most common class in both directions becomes Large, and the mode baseline predicts Large everywhere (macro-F1 0.225). On words, switches into L2 are most often Small (a one- or two-word insertion) and switches back into L1 most often Large, the same asymmetry as §4.4.
 - **The pipeline works end to end.** A 400-step sub-word smoke run, with pieces only and no language input, passes the causality check at 0.00e+00 drift, and reaches switch F1 0.259. That figure is on only the first 50 test batches (124,800 positions, about 7% of the split, 57% of them Cantonese), with the threshold tuned on 50 validation batches, so it is **not** comparable with the full-split baseline above. It shows the pipeline trains; the full runs, and the XLM-R backbone, come next.
 
+### 4.7 All models on one scorecard
+
+Since 2026-09-28, every model is scored with the same report (`src/evaluation.py`), and `scripts/compare_models.py` puts them side by side, overall and pair by pair. The current table is [`model_comparison.md`](model_comparison.md). Headlines:
+- **The per-pair hazard** (switch F1 0.329 on words) is now the training-free bar, not the pooled 0.295.
+- **The from-scratch transformer** reaches 0.513 on words and 0.453 on pieces, and is best on all 15 pairs.
+- **German→French** remains the hardest pair for every model.
+
+XLM-R with a causal mask is trained on Kaggle (`kaggle/train_xlmr.ipynb`), and its results file drops into the same table.
+
 ## 5. Next Steps — challenges with sub-word tokenization and Language-ID→segment mapping
 
 ### 5.1 Tokenization: the unit is not the same across languages
