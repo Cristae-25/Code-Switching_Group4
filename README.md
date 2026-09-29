@@ -14,7 +14,7 @@ Can a model predict that a speaker is **about to switch language** before it hap
 | Per-word language labels for the whole corpus | ✅ done (AnE-LID / script / dictionary, with names resolved by context) |
 | Sub-word (XLM-R token) labels: language, switch, duration | ✅ done (`data/subword.parquet`) |
 | Baselines + from-scratch causal transformer, words and pieces | ✅ done: switch F1 **0.513** (words) / **0.453** (pieces), against 0.329 / 0.266 for the best training-free baseline (per-pair hazard). See [`docs/model_comparison.md`](docs/model_comparison.md) |
-| XLM-R with a causal mask | ✅ trained on Kaggle: switch F1 **0.646** (pieces), macro-F1 0.676, into L2 0.536, duration accuracy 0.678, better than the from-scratch model on all 15 pairs; 4 pairs above 0.7. See [`docs/results/`](docs/results/) |
+| XLM-R with a causal mask | ✅ trained on Kaggle: switch F1 **0.646** (pieces), macro-F1 0.676, into L2 0.536, duration accuracy 0.678, better than the from-scratch model on all 15 pairs; 4 pairs above 0.7. Zero-shot on 4 held-out languages: F1 **0.625**. See [`docs/results/`](docs/results/) |
 
 The course schedule and pace are in [`docs/TIMELINE.md`](docs/TIMELINE.md).
 

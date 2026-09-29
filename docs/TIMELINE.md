@@ -81,6 +81,6 @@ Status key: ✅ done · 🟡 partial / done differently · ⬜ not started
 - **Week 5 milestone met** (a multilingual backbone with a causal mask). Weeks 6–8 are covered too: dual heads, multitask loss, baselines.
 - **Still to run:**
   1. ~~Download `data/anticipation_xlmr.json`~~ Done: duration and per-direction are in the results. Two independent runs agree within ±0.004 per pair.
-  2. The XLM-R zero-shot run.
+  2. ~~The XLM-R zero-shot run.~~ Done: held-out F1 0.625, 12.6% below trained-on. German→French transfers (0.450 against always-switch 0.167).
   3. The from-scratch zero-shot rerun with the new report, as its comparison.
   4. Seeds for the variance analysis (Week 12).

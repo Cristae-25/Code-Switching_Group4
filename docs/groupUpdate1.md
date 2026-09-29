@@ -86,6 +86,11 @@ German→French, the corpus's one non-English second language, the model scores
 the same variable in training, so full universality is not yet demonstrable
 from this corpus.
 
+**Update (2026-09-29): zero-shot XLM-R (§4.8)** changes this picture.
+- **Held out:** trained on the same 10 first languages and scored on the 4 held out, it reaches **F1 0.625** (macro 0.627). That is only 12.6% below the same pairs when trained on, against a 27% loss for the from-scratch model.
+- **It beats trained-on models:** on all five held-out pairs it beats the from-scratch model that *was* trained on them.
+- **German→French now transfers:** F1 **0.450** against 0.167 for always-switching. So switch anticipation does reach an unseen *second* language with a pretrained multilingual model. It is still the largest drop (−0.21), so the English bias is reduced, not gone.
+
 **5 · Next steps (§5).** Two concrete blockers. **(a) The token is not the same
 unit across languages** — CJK is tokenized per character, Latin per word, so
 run lengths are not comparable and vocabulary pressure is wildly uneven (OOV at
@@ -766,6 +771,25 @@ These are exact figures from `docs/results/2026-09-29_xlmr_causal.json`. A secon
 - **Macro-F1 is above micro-F1 (0.676 vs 0.646).** Cantonese, half the test positions, is one of the weaker pairs (0.619). The model is better on the typical pair than on the largest one.
 - **The hardest pairs are the ones that switch mid-clause:** Malay, Cantonese, Vietnamese and Tagalog. The EDA (`notebooks/switch_eda.ipynb` §2c) shows these rarely switch at punctuation, so there is less of a clause-boundary cue.
 - **German→French rises to 0.658** (+0.271, among the largest gains). It was trained on here, so this says nothing yet about the zero-shot question (§4.5, §5.3 item 2). That needs the XLM-R zero-shot run.
+
+#### Zero-shot: 4 languages held out entirely (2026-09-29)
+
+Same settings as above, trained on the same 10 first languages as §4.5 (Korean, Italian, Hindi and German held out). The threshold was tuned on the trained pairs' validation split only. Record: `docs/results/2026-09-29_xlmr_causal_zeroshot.md`.
+
+| Held-out pair | **Zero-shot XLM-R** | XLM-R trained on it | From-scratch trained on it (pieces) | Always switch |
+|---|---:|---:|---:|---:|
+| Korean | **0.775** | 0.808 | 0.611 | 0.173 |
+| Italian | **0.661** | 0.671 | 0.406 | 0.162 |
+| German→English | **0.653** | 0.733 | 0.469 | 0.177 |
+| Hindi | **0.595** | 0.715 | 0.541 | 0.344 |
+| German→French | **0.450** | 0.658 | 0.387 | 0.167 |
+| **All held out** | **0.625** (macro 0.627) | 0.717 (mean) | | |
+
+The prediction in §1.4 that Italian would be the easiest and Korean the hardest is wrong again, but differently. Italian barely drops (−0.010), yet Korean is the *highest* zero-shot pair (0.775, −0.033): its script makes the switch cue visible. Romanized Hindi drops most among the English pairs (−0.120).
+
+**German→French, the diagnostic pair, transfers** (0.450, against 0.243 zero-shot for the from-scratch word model). "Anticipate a switch" and "anticipate English" are now separable, and the second is only part of what XLM-R learned. The remaining −0.21 gap is still the argument for a second non-English second language (§5.3 item 2).
+
+The from-scratch zero-shot figure in §4.5 is word-level, from the earlier report, with the German pairs merged. A piece-level from-scratch zero-shot run with the current report is the pending like-for-like comparison.
 
 ## 5. Next Steps — challenges with sub-word tokenization and Language-ID→segment mapping
 

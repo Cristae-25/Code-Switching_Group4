@@ -4,6 +4,7 @@ One dated file per training run whose numbers we report, plus the raw tables exa
 
 | Date | Run | Headline | Files |
 |---|---|---|---|
+| 2026-09-29 | XLM-R + causal mask, **zero-shot**: trained on 10 first languages, Korean / Italian / Hindi / German held out | held-out F1 **0.625** (macro 0.627), 12.6% below trained-on; German→French 0.450 (against always-switch 0.167); beats the from-scratch model trained on those pairs on all 5 | [record](2026-09-29_xlmr_causal_zeroshot.md), [results JSON](2026-09-29_xlmr_causal_zeroshot.json) |
 | 2026-09-29 | XLM-R + causal mask, all 15 pairs, sub-word (Kaggle T4), 2 independent runs | switch F1 **0.646**, macro-F1 0.676, into L2 0.536; duration accuracy 0.678 / macro-F1 0.575; 4 pairs above 0.7; better than the from-scratch model on every pair (+0.22 mean); the two runs agree within ±0.004 per pair | [record](2026-09-29_xlmr_causal.md), [results JSON](2026-09-29_xlmr_causal.json), [run 2 per-pair CSV](2026-09-29_xlmr_causal_run2_per_pair.csv) |
 | 2026-09-28 | Baselines (pooled and per-pair hazard) and the from-scratch transformer, words and pieces | from-scratch 0.513 (words) / 0.453 (pieces); per-pair hazard 0.329 / 0.266 | [`../model_comparison.md`](../model_comparison.md) |
 
