@@ -35,32 +35,38 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.anticipation import L2, N_DUR, DUR_LABELS, row_example  # noqa: E402
-from src.metrics import by_group, duration_scores, fmt_table, macro_f1, prf, wilson  # noqa: E402
-from src.streaming import iter_rows  # noqa: E402
+from src.anticipation import L2, NONE, N_DUR, DUR_LABELS  # noqa: E402
+from src.metrics import (by_group, confusion_table, duration_scores, fmt_table,  # noqa: E402
+                         macro_f1, prf, wilson)
+from src.streaming import COLUMNS, DEFAULT_PATHS, example_for, iter_rows  # noqa: E402
 
-DEFAULT_PATH = "data/tagged.parquet"
 RUNPOS_CAP = 10          # run-position feature is capped; the tail is flat
 
 
 def run_position(langs: np.ndarray) -> np.ndarray:
-    """How many tokens the current run has already covered, inclusive of t.
+    """How many language-bearing positions the current run has covered, inclusive of t.
 
-    Strictly causal: position t depends only on langs[:t+1].
+    Strictly causal. NONE positions are transparent: they carry the count
+    through unchanged and are never scored.
     """
-    pos = np.ones(len(langs), dtype=np.int64)
-    for i in range(1, len(langs)):
-        pos[i] = pos[i - 1] + 1 if langs[i] == langs[i - 1] else 1
+    pos = np.zeros(len(langs), dtype=np.int64)
+    run, last = 0, None
+    for i, lang in enumerate(langs):
+        if lang != NONE:
+            run = run + 1 if lang == last else 1
+            last = lang
+        pos[i] = run
     return pos
 
 
-def collect(path: str, split: str, limit: int | None = None):
+def collect(path: str, split: str, limit: int | None = None, unit: str = "word"):
     """Stream a split into flat arrays of causal features and labels."""
     cur_lang, runpos, y_sw, y_dur, dur_ok, pair = [], [], [], [], [], []
-    for i, row in enumerate(iter_rows(path, split=split)):
+    make = example_for(unit)
+    for i, row in enumerate(iter_rows(path, split=split, columns=COLUMNS[unit])):
         if limit and i >= limit:
             break
-        ex = row_example(row)
+        ex = make(row)
         if ex is None:
             continue
         m = ex["y_sw"] >= 0                       # drop the final position
@@ -110,10 +116,11 @@ def fit_duration(train: dict) -> np.ndarray:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--path", default=DEFAULT_PATH)
+    ap.add_argument("--path", default=None)
+    ap.add_argument("--unit", choices=["word", "subword"], default="word")
     ap.add_argument("--limit", type=int, default=None, help="rows per split, for a smoke run")
     ap.add_argument("--threshold", type=float, default=0.5)
-    ap.add_argument("--json", default="data/baseline_anticipation.json")
+    ap.add_argument("--json", default=None)
     ap.add_argument("--names", choices=["script_words", "transparent", "script", "hybrid", "language"],
                     default="script_words",
                     help="how named entities count (see src/segments.py); needs an "
@@ -121,15 +128,19 @@ def main() -> None:
     args = ap.parse_args()
     import src.anticipation as _ant
     _ant.NAMES = args.names
+    args.path = args.path or DEFAULT_PATHS[args.unit]
+    args.json = args.json or ("data/baseline_anticipation.json" if args.unit == "word"
+                              else "data/baseline_anticipation_subword.json")
+    print(f"unit {args.unit} | {args.path}")
 
     print("streaming train split ...", flush=True)
-    train = collect(args.path, "train", args.limit)
+    train = collect(args.path, "train", args.limit, args.unit)
     print(f"  {len(train['y_sw']):,} scored positions", flush=True)
     print("streaming val split ...", flush=True)
-    val = collect(args.path, "val", args.limit)
+    val = collect(args.path, "val", args.limit, args.unit)
     print(f"  {len(val['y_sw']):,} scored positions", flush=True)
     print("streaming test split ...", flush=True)
-    test = collect(args.path, "test", args.limit)
+    test = collect(args.path, "test", args.limit, args.unit)
     print(f"  {len(test['y_sw']):,} scored positions\n", flush=True)
 
     base = train["y_sw"].mean()
@@ -198,8 +209,9 @@ def main() -> None:
     ds = duration_scores(d_true, d_pred)
     print(f"\nDuration at oracle switch positions (n={ds['n']:,}), "
           f"mode-per-direction baseline:")
-    print(f"  bucket accuracy {ds['accuracy']:.3f} | within one bucket "
-          f"{ds['within_one']:.3f} | MAE {ds['mae_buckets']:.3f} buckets")
+    print(f"  3-class accuracy {ds['accuracy']:.3f} | macro-F1 {ds['macro_f1']:.3f} "
+          f"| within one class {ds['within_one']:.3f}")
+    print(confusion_table(ds["confusion"], DUR_LABELS))
     dur_rows = []
     for lang, label in ((1, "into L2"), (0, "into L1")):
         sel = target_lang == lang

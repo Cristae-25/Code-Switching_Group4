@@ -20,17 +20,17 @@ import torch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.anticipation import row_example  # noqa: E402
 from src.causal_model import CausalSwitchModel  # noqa: E402
 from src.metrics import prf  # noqa: E402
-from src.streaming import SwitchWindowDataset, collate, iter_rows  # noqa: E402
+from src.streaming import (COLUMNS, DEFAULT_PATHS, VOCAB_PATHS,  # noqa: E402
+                           SwitchWindowDataset, collate, example_for, iter_rows)
 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--ckpt", default="models/anticipation_causal.pt")
-    ap.add_argument("--vocab", default="data/vocab_anticipation.json")
-    ap.add_argument("--path", default="data/tagged.parquet")
+    ap.add_argument("--vocab", default=None, help="default: the vocabulary for the checkpoint's unit")
+    ap.add_argument("--path", default=None, help="default: the parquet for the checkpoint's unit")
     ap.add_argument("--l1", required=True)
     ap.add_argument("--l2", required=True)
     ap.add_argument("--split", default="test")
@@ -44,28 +44,33 @@ def main() -> None:
     _ant.NAMES = args.names
 
     import json
-    vocab = json.load(open(args.vocab))
     ck = torch.load(args.ckpt, map_location="cpu", weights_only=False)
     a = ck["args"]
+    unit = a.get("unit", "word")          # checkpoints from before --unit are word models
+    path = args.path or DEFAULT_PATHS[unit]
+    vocab = json.load(open(args.vocab or VOCAB_PATHS[unit]))
+    state = ck["state"]
     model = CausalSwitchModel(ck["vocab_size"], d_model=a["d_model"],
                               n_layers=a["layers"], n_heads=a["heads"],
                               d_ff=a["d_model"] * 2, max_len=a["window"],
                               n_pairs=14,
-                              use_pair=ck["state"].get("pair_emb.weight") is not None,
-                              n_dur=ck["state"]["head_dur.weight"].shape[0])
-    model.load_state_dict(ck["state"])
+                              use_pair=state.get("pair_emb.weight") is not None,
+                              use_lang=state.get("lang_emb.weight") is not None,
+                              n_dur=state["head_dur.weight"].shape[0])
+    model.load_state_dict(state)
     model.eval().to(args.device)
     tau = ck["tau"]
 
-    ds = SwitchWindowDataset(args.path, vocab, split=args.split,
-                             window=a["window"], stride=a["stride"])
+    ds = SwitchWindowDataset(path, vocab, split=args.split,
+                             window=a["window"], stride=a["stride"], unit=unit)
+    make = example_for(unit)
     logits, truth = [], []
     batch = []
     with torch.no_grad():
-        for row in iter_rows(args.path, split=args.split):
+        for row in iter_rows(path, split=args.split, columns=COLUMNS[unit]):
             if row["first_language"] != args.l1 or row["second_language"] != args.l2:
                 continue
-            ex = row_example(row)
+            ex = make(row)
             if ex is None:
                 continue
             batch.extend(ds._windows(ex))

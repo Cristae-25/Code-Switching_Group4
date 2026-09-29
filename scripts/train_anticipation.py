@@ -25,10 +25,12 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.anticipation import DUR_LABELS, N_DUR  # noqa: E402
 from src.causal_model import CausalSwitchModel, check_causality  # noqa: E402
-from src.metrics import by_group, duration_scores, fmt_table, macro_f1, prf  # noqa: E402
-from src.streaming import build_vocab, make_loader  # noqa: E402
+from src.metrics import by_group, confusion_table, duration_scores, fmt_table, macro_f1, prf  # noqa: E402
+from src.streaming import (DEFAULT_PATHS, VOCAB_PATHS, build_subword_vocab,  # noqa: E402
+                           build_vocab, make_loader)
 
-VOCAB_PATH = "data/vocab_anticipation.json"
+UNIT_DEFAULTS = {"word": dict(window=256, stride=192, vocab_size=50_000),
+                 "subword": dict(window=384, stride=288, vocab_size=100_000)}
 PAIRS = ["Cantonese", "Arabic", "Philippines", "German", "Chinese", "Vietnamese",
          "Malay", "Japanese", "Hindi", "Korean", "Spanish", "French", "Russian",
          "Italian"]
@@ -74,13 +76,13 @@ def tune_threshold(prob, truth):
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--path", default="data/tagged.parquet")
+    ap.add_argument("--path", default=None)
     ap.add_argument("--build-vocab", action="store_true")
-    ap.add_argument("--vocab-size", type=int, default=50_000)
+    ap.add_argument("--vocab-size", type=int, default=None)
     ap.add_argument("--steps", type=int, default=4000)
     ap.add_argument("--batch-size", type=int, default=32)
-    ap.add_argument("--window", type=int, default=256)
-    ap.add_argument("--stride", type=int, default=192)
+    ap.add_argument("--window", type=int, default=None)
+    ap.add_argument("--stride", type=int, default=None)
     ap.add_argument("--d-model", type=int, default=256)
     ap.add_argument("--layers", type=int, default=4)
     ap.add_argument("--heads", type=int, default=4)
@@ -96,6 +98,9 @@ def main() -> None:
     ap.add_argument("--no-pair", action="store_true",
                     help="drop the language-pair embedding - required for a "
                          "held-out pair the model has never seen")
+    ap.add_argument("--unit", choices=["word", "subword"], default="word")
+    ap.add_argument("--no-lang", action="store_true",
+                    help="no language input (always on for --unit subword)")
     ap.add_argument("--out", default="data/anticipation_model.json")
     ap.add_argument("--ckpt", default="models/anticipation_causal.pt")
     ap.add_argument("--names", choices=["script_words", "transparent", "script", "hybrid", "language"],
@@ -105,16 +110,25 @@ def main() -> None:
     args = ap.parse_args()
     import src.anticipation as _ant
     _ant.NAMES = args.names
+    for k, v in UNIT_DEFAULTS[args.unit].items():
+        if getattr(args, k) is None:
+            setattr(args, k, v)
+    if args.path is None:
+        args.path = DEFAULT_PATHS[args.unit]
+    vocab_path = VOCAB_PATHS[args.unit]
+    use_lang = not (args.no_lang or args.unit == "subword")
 
-    if args.build_vocab or not os.path.exists(VOCAB_PATH):
+    if args.build_vocab or not os.path.exists(vocab_path):
         t0 = time.time()
         print("building vocabulary from the train split ...", flush=True)
-        vocab = build_vocab(args.path, args.vocab_size)
-        os.makedirs(os.path.dirname(VOCAB_PATH), exist_ok=True)
-        json.dump(vocab, open(VOCAB_PATH, "w"))
-        print(f"  {len(vocab):,} types in {time.time()-t0:.0f}s -> {VOCAB_PATH}")
-    vocab = json.load(open(VOCAB_PATH))
+        builder = build_vocab if args.unit == "word" else build_subword_vocab
+        vocab = builder(args.path, args.vocab_size)
+        os.makedirs(os.path.dirname(vocab_path), exist_ok=True)
+        json.dump(vocab, open(vocab_path, "w"))
+        print(f"  {len(vocab):,} types in {time.time()-t0:.0f}s -> {vocab_path}")
+    vocab = json.load(open(vocab_path))
     print(f"vocab {len(vocab):,}")
+    print(f"unit {args.unit} | language input {'on' if use_lang else 'off'}")
 
     train_langs = [x.strip() for x in args.train_langs.split(",") if x.strip()]
     holdout = [p for p in PAIRS if p not in train_langs] if train_langs else []
@@ -127,7 +141,8 @@ def main() -> None:
                               n_layers=args.layers, n_heads=args.heads,
                               d_ff=args.d_model * 2, max_len=args.window,
                               n_pairs=len(PAIRS),
-                              use_pair=not (args.no_pair or bool(holdout))).to(dev)
+                              use_pair=not (args.no_pair or bool(holdout)),
+                              use_lang=use_lang).to(dev)
     n_param = sum(p.numel() for p in model.parameters())
     print(f"device {dev} | {n_param/1e6:.2f}M params")
 
@@ -139,7 +154,8 @@ def main() -> None:
         raise SystemExit("aborting: model is not causal")
     model.to(dev)
 
-    common = dict(window=args.window, stride=args.stride, pair_index=PAIR_INDEX)
+    common = dict(window=args.window, stride=args.stride, pair_index=PAIR_INDEX,
+                  unit=args.unit)
     train_loader = make_loader(args.path, vocab, "train", args.batch_size,
                                args.workers, languages=train_langs or None, **common)
     val_loader = make_loader(args.path, vocab, "val", args.batch_size, 0,
@@ -229,12 +245,13 @@ def main() -> None:
 
     ds = duration_scores(dt_, dp_)
     print(f"\nDuration head (oracle switch positions, n={ds['n']:,}): "
-          f"bucket acc {ds['accuracy']:.3f} | within one {ds['within_one']:.3f} "
-          f"| MAE {ds['mae_buckets']:.3f}")
+          f"3-class acc {ds['accuracy']:.3f} | macro-F1 {ds['macro_f1']:.3f} "
+          f"| within one {ds['within_one']:.3f}")
+    print(confusion_table(ds["confusion"], DUR_LABELS))
 
     os.makedirs(os.path.dirname(args.ckpt), exist_ok=True)
     torch.save(dict(state=model.state_dict(), args=vars(args), tau=tau,
-                    vocab_size=len(vocab)), args.ckpt)
+                    vocab_size=len(vocab), use_lang=use_lang), args.ckpt)
     payload = dict(overall=s, per_pair=named, macro_f1=macro_f1(named),
                    duration=ds, tau=tau, val_f1=vf1, params=n_param,
                    causality=chk, steps=step, args=vars(args))
