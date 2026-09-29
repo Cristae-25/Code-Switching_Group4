@@ -47,3 +47,43 @@ def test_build_model_picks_the_architecture():
     assert isinstance(scratch, CausalSwitchModel)
     x = build_model(dict(model="xlmr"), 300, xlmr_config=_tiny())
     assert isinstance(x, CausalXLMR)
+
+
+# --- the same wrapper around RoBERTa and mBERT --------------------------------
+
+from src.xlmr_model import BACKBONES, CausalPretrained  # noqa: E402
+
+
+def _tiny_cfg(kind):
+    kw = dict(vocab_size=300, hidden_size=32, num_hidden_layers=2, num_attention_heads=2,
+              intermediate_size=64, max_position_embeddings=80)
+    return transformers.BertConfig(**kw) if kind == "bert" else transformers.RobertaConfig(**kw)
+
+
+def test_backbones_name_the_three_pretrained_models():
+    assert BACKBONES == {"xlmr": "xlm-roberta-base", "roberta": "roberta-base",
+                         "mbert": "bert-base-multilingual-cased"}
+
+
+@pytest.mark.parametrize("kind", ["bert", "roberta"])
+def test_other_backbones_are_causal(kind):
+    m = CausalPretrained(config=_tiny_cfg(kind))
+    assert check_causality(m, 300, seq_len=24)["max_abs_logit_drift"] == 0.0
+    sw, dur = m.eval()(torch.randint(5, 300, (2, 10)))
+    assert sw.shape == (2, 10) and dur.shape == (2, 10, 3)
+
+
+@pytest.mark.parametrize("kind", ["bert", "roberta"])
+def test_the_check_catches_bidirectional_backbones(kind):
+    m = CausalPretrained(config=_tiny_cfg(kind))
+    m.encoder.config.is_decoder = False
+    for layer in m.encoder.encoder.layer:
+        layer.attention.self.is_causal = False
+    assert not check_causality(m, 300, seq_len=24)["causal"]
+
+
+def test_build_model_picks_each_backbone():
+    for model in ("roberta", "mbert"):
+        kind = "bert" if model == "mbert" else "roberta"
+        m = build_model(dict(model=model), 300, xlmr_config=_tiny_cfg(kind))
+        assert isinstance(m, CausalPretrained)
