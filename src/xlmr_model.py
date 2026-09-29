@@ -45,6 +45,8 @@ class CausalXLMR(nn.Module):
         self.head_dur = nn.Linear(d, n_dur)
 
     def forward(self, word_ids, lang_ids=None, pair_id=None):
-        h = self.encoder(input_ids=word_ids).last_hidden_state
+        # use_cache=False: a decoder-mode encoder would otherwise build a key/value
+        # cache on every call, which only costs memory here.
+        h = self.encoder(input_ids=word_ids, use_cache=False).last_hidden_state
         h = self.drop(h)
         return self.head_sw(h).squeeze(-1), self.head_dur(h)

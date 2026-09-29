@@ -152,7 +152,8 @@ if not SAVE_CHECKPOINT:
     for f in ("models/anticipation_xlmr.pt", "models/anticipation_xlmr_zeroshot.pt"):
         if os.path.exists(f):
             os.remove(f)
-os.remove("data/subword.parquet")          # derived from the private labels: don't publish it
+if os.path.exists("data/subword.parquet"):  # derived from the private labels: don't publish it
+    os.remove("data/subword.parquet")
 print(sorted(os.listdir("data")), sorted(os.listdir("models")))
 """
 

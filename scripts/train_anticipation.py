@@ -38,8 +38,8 @@ from src.streaming import (DEFAULT_PATHS, VOCAB_PATHS, build_subword_vocab,  # n
 from src.subword import XLMR_VOCAB  # noqa: E402
 
 UNIT_DEFAULTS = {"word": dict(window=256, stride=192, vocab_size=50_000,
-                              out="data/anticipation_model.json",
-                              ckpt="models/anticipation_causal.pt"),
+                              out="data/anticipation_word.json",
+                              ckpt="models/anticipation_word.pt"),
                  "subword": dict(window=384, stride=288, vocab_size=100_000,
                                  out="data/anticipation_model_subword.json",
                                  ckpt="models/anticipation_subword.pt")}

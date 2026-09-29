@@ -345,8 +345,8 @@ def _args(**kw):
 def test_subword_training_never_overwrites_the_word_model_by_default():
     mod = _train_script()
     word, sub = mod.resolve_defaults(_args()), mod.resolve_defaults(_args(unit="subword"))
-    assert word.ckpt == "models/anticipation_causal.pt"
-    assert word.out == "data/anticipation_model.json"
+    assert word.ckpt == "models/anticipation_word.pt"
+    assert word.out == "data/anticipation_word.json"          # what compare_models reads
     assert sub.ckpt != word.ckpt and sub.out != word.out
     assert (sub.window, sub.stride, sub.path) == (384, 288, "data/subword.parquet")
 

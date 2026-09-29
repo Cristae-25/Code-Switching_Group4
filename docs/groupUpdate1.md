@@ -716,7 +716,7 @@ Three readings:
 Since 2026-09-28, every model is scored with the same report (`src/evaluation.py`), and `scripts/compare_models.py` puts them side by side, overall and pair by pair. The current table is [`model_comparison.md`](model_comparison.md). Headlines:
 - **The per-pair hazard** (switch F1 0.329 on words) is now the training-free bar, not the pooled 0.295.
 - **The from-scratch transformer** reaches 0.513 on words and 0.453 on pieces, and is best on all 15 pairs.
-- **German→French** remains the hardest pair for every model.
+- **German→French** remains the hardest pair for both transformers and both pooled hazards. The per-pair hazards find Chinese→English (words) and French→English (pieces) harder.
 
 XLM-R with a causal mask is trained on Kaggle (`kaggle/train_xlmr.ipynb`), and its results file drops into the same table.
 

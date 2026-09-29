@@ -143,7 +143,7 @@ Every model is trained and scored the same way, so the results are directly comp
 | never / always / random at the base rate | nothing (sanity checks) |
 | `naive_l2` | "switch iff the current token is L2" |
 | hazard (pooled / **per pair**) | P(switch \| current language, how long it has lasted), fitted on train |
-| from-scratch causal transformer | a 15 M-parameter model trained on our labels only |
+| from-scratch causal transformer | a small model (15 M parameters on words, 23 M on pieces) trained on our labels only |
 | **XLM-R + causal mask** | a pretrained multilingual model, fine-tuned (the target) |
 
 **Training XLM-R on Kaggle.**

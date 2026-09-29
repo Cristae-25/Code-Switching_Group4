@@ -59,9 +59,16 @@ def load_runs(specs) -> list[dict]:
             print(f"skipping {path}: old result format (re-run it to include it)")
             continue
         label = f"{data.get('model', 'scratch')} ({data.get('unit', 'word')})"
+        trained_on = [x for x in (data.get("args") or {}).get("train_langs", "").split(",") if x]
+        if trained_on:                                   # a zero-shot run: say what it saw
+            label = label[:-1] + f", trained on {len(trained_on)} pairs)"
         runs.append(_summary(label, data))
         if "zero_shot" in data:
-            runs.append(_summary(label + ", zero-shot pairs", data["zero_shot"]))
+            runs.append(_summary(label[:-1] + ", held-out pairs)", data["zero_shot"]))
+    labels = [r["label"] for r in runs]
+    dup = {x for x in labels if labels.count(x) > 1}
+    if dup:
+        raise SystemExit(f"two result files share a label, which would merge them: {sorted(dup)}")
     return runs
 
 
@@ -113,8 +120,10 @@ def main() -> int:
         raise SystemExit("no result files found")
     table = pair_table(runs)
     md = to_markdown(runs, table)
-    open(args.md, "w").write(md)
-    json.dump(dict(runs=runs, pair_table=table.to_dict()), open(args.json, "w"), indent=2, default=float)
+    with open(args.md, "w") as fh:
+        fh.write(md)
+    with open(args.json, "w") as fh:
+        json.dump(dict(runs=runs, pair_table=table.to_dict()), fh, indent=2, default=float)
     print(md)
     print(f"wrote {args.md} and {args.json}")
     return 0

@@ -37,3 +37,17 @@ def test_table_has_one_row_per_pair_and_ranks_models(tmp_path):
     assert table.loc["Spanish->English", "xlmr (subword)"] == 0.6
     md = m.to_markdown(runs, table)
     assert "into L2" in md and "Spanish->English" in md
+
+
+def test_zero_shot_run_never_collides_with_the_main_run(tmp_path):
+    main, zs = tmp_path / "x.json", tmp_path / "x_zs.json"
+    json.dump(dict(model="xlmr", unit="subword", args=dict(train_langs=""),
+                   **_report({"Spanish->English": 0.6}, 0.4)), open(main, "w"))
+    json.dump(dict(model="xlmr", unit="subword", args=dict(train_langs="Spanish,French"),
+                   **_report({"Spanish->English": 0.1}, 0.1),
+                   zero_shot=_report({"Hindi->English": 0.3}, 0.2)), open(zs, "w"))
+    m = _mod()
+    runs = m.load_runs([str(main), str(zs)])
+    labels = [r["label"] for r in runs]
+    assert len(labels) == len(set(labels)) == 3
+    assert m.pair_table(runs).loc["Spanish->English", "xlmr (subword)"] == 0.6
