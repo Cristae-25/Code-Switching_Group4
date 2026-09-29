@@ -487,6 +487,8 @@ Two findings:
   insertions snap back immediately; anything that survives four tokens has
   become a genuine clause and behaves differently.
 
+> **Correction (2026-09-28, `notebooks/switch_eda.ipynb` §2a).** The table above is pooled over all pairs, and half of its tokens are Cantonese. Per pair, the first-language hazard is flat only for Chinese, Japanese, Korean and Cantonese. In the Latin-, Cyrillic- and Arabic-script pairs it **rises steadily** with run length, from about 2% to about 20% by the 15th word, so how long someone has been speaking Spanish *does* predict a switch. The second-language hazard is U-shaped in every pair. A per-pair hazard baseline should therefore do better than the pooled one on switching into L2 outside CJK.
+
 This asymmetry is why `hazard@tuned` beats `naive_l2` — and why it beats it *in
 only one direction*:
 

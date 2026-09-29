@@ -141,6 +141,7 @@ scripts/      command-line entry points (see "Common commands")
 tests/        pytest suite; fixtures/ holds frozen model outputs for the name edge cases
 kaggle/       load_labels.ipynb: download our labels, choose word/sub-word + names policy (CPU)
               label_switchlingua.ipynb: re-label the corpus from scratch (GPU, T4x2)
+notebooks/    switch_eda.ipynb: when switches happen and how long they last, by pair and persona
 docs/         write-ups (start here)
 data/         local only: small result JSONs are tracked, everything else is gitignored
 ```
@@ -150,7 +151,8 @@ data/         local only: small result JSONs are tracked, everything else is git
 1. [`docs/labelling_models.md`](docs/labelling_models.md): which model labelled which pair, its accuracy on human-annotated data, and how names are handled.
 2. [`docs/groupUpdate1.md`](docs/groupUpdate1.md): the anticipation task. It covers objectives, the held-out design, causal constraints, baselines, results, and next steps.
 3. [`docs/labelling_pipeline.md`](docs/labelling_pipeline.md): the full history of the labels. It covers every tagger tried, its accuracy, and why it was kept or rejected.
-4. [`docs/TIMELINE.md`](docs/TIMELINE.md): course milestones and pace.
+4. [`notebooks/switch_eda.ipynb`](notebooks/switch_eda.ipynb): exploratory analysis of the labels: switch timing (hazard curves), duration classes, and persona and style effects, all per pair. It renders on GitHub.
+5. [`docs/TIMELINE.md`](docs/TIMELINE.md): course milestones and pace.
 
 ## Ground rules
 
