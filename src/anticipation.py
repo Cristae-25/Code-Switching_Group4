@@ -169,3 +169,19 @@ def row_example(row) -> dict | None:
         quality=row.get("quality", "unknown"),
         **anticipatory_labels(langs),
     )
+
+
+def subword_example(row) -> dict | None:
+    """Build one sub-word training example from a ``data/subword.parquet`` row."""
+    langs = np.asarray(row["piece_lang"], dtype=np.int8)
+    if int((langs != NONE).sum()) < 2:
+        return None
+    return dict(
+        row_id=int(row["row_id"]),
+        ids=np.asarray(row["piece_ids"], dtype=np.int64),
+        langs=langs,
+        first_language=row["first_language"],
+        second_language=row["second_language"],
+        quality=row.get("quality", "unknown"),
+        **anticipatory_labels(langs),
+    )

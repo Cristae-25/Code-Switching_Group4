@@ -197,3 +197,82 @@ def test_never_predicting_a_switch_scores_zero_f1_at_high_accuracy():
     y = np.array([0] * 95 + [1] * 5)
     s = prf(y, np.zeros_like(y))
     assert s["accuracy"] == 0.95 and s["f1"] == 0.0
+
+
+# --- sub-word streaming -------------------------------------------------------
+
+from src.anticipation import subword_example  # noqa: E402
+from src.streaming import build_subword_vocab, encode_pieces  # noqa: E402
+
+_SW_VOCAB = {"<pad>": 0, "<unk>": 1, "<bos>": 2, **{str(i): i for i in range(3, 60)}}
+
+
+def _sw_row(ids, langs, row_id=0):
+    return dict(row_id=row_id, piece_ids=list(ids), piece_lang=list(langs),
+                first_language="Spanish", second_language="English", quality="provisional")
+
+
+def test_subword_example_labels_follow_piece_lang():
+    ex = subword_example(_sw_row([5, 6, 7, 8, 9, 10, 11], [0, NONE, 0, 1, NONE, 1, 0]))
+    assert list(ex["y_sw"]) == [0, -1, 1, 0, -1, 1, -1]
+    assert ex["ids"].dtype == np.int64 and ex["langs"].dtype == np.int8
+
+
+def test_subword_example_needs_two_language_pieces():
+    assert subword_example(_sw_row([5, 6, 7], [NONE, 0, NONE])) is None
+
+
+def test_encode_pieces_maps_xlmr_ids_through_the_compact_vocab():
+    vocab = {"<pad>": 0, "<unk>": 1, "<bos>": 2, "17": 3}
+    assert list(encode_pieces([17, 99], vocab)) == [3, 1]
+
+
+def test_subword_windows_score_only_language_pieces():
+    ex = subword_example(_sw_row([5, 6, 7, 8, 9], [0, NONE, 1, 1, 0]))
+    ds = SwitchWindowDataset("unused", _SW_VOCAB, window=8, stride=8, unit="subword")
+    w = next(iter(ds._windows(ex)))
+    assert list(w["sw_mask"][:5]) == [True, False, True, True, False]
+    assert list(w["word_ids"][:5]) == [5, 6, 7, 8, 9]
+
+
+def test_long_subword_row_scores_every_language_piece_once():
+    rng = np.random.default_rng(1)
+    n = 1000
+    langs = rng.choice([0, 1, NONE], size=n, p=[0.6, 0.25, 0.15]).astype(np.int8)
+    ex = subword_example(_sw_row(rng.integers(3, 60, n), langs))
+    ds = SwitchWindowDataset("unused", _SW_VOCAB, window=384, stride=288, unit="subword")
+    seen = []
+    for i, w in enumerate(ds._windows(ex)):
+        seen.extend(288 * i + j for j in np.flatnonzero(w["sw_mask"]))
+    assert seen == sorted(set(seen))
+    assert seen == list(np.flatnonzero(ex["y_sw"] >= 0))
+
+
+def test_subword_window_inputs_depend_only_on_earlier_pieces():
+    rng = np.random.default_rng(2)
+    ids = rng.integers(3, 60, 40)
+    langs = rng.choice([0, 1, NONE], size=40).astype(np.int8)
+    ds = SwitchWindowDataset("unused", _SW_VOCAB, window=64, stride=48, unit="subword")
+    first = next(iter(ds._windows(subword_example(_sw_row(ids, langs)))))
+    for t in range(39):
+        ids2, langs2 = ids.copy(), langs.copy()
+        ids2[t + 1:] = rng.integers(3, 60, 39 - t)
+        langs2[t + 1:] = rng.choice([0, 1], size=39 - t)
+        ex2 = subword_example(_sw_row(ids2, langs2))
+        if ex2 is None:
+            continue
+        w2 = next(iter(ds._windows(ex2)))
+        assert (first["word_ids"][:t + 1] == w2["word_ids"][:t + 1]).all()
+
+
+def test_build_subword_vocab_uses_the_train_split_only(tmp_path):
+    import pandas as pd
+    rows = [dict(row_id=0, first_language="Spanish", second_language="English",
+                 quality="provisional", piece_ids=[5, 5, 6], piece_lang=[0, 0, 1]),
+            dict(row_id=8, first_language="Spanish", second_language="English",
+                 quality="provisional", piece_ids=[7, 7, 7], piece_lang=[0, 1, 0])]  # row 8 is val
+    path = str(tmp_path / "sw.parquet")
+    pd.DataFrame(rows).to_parquet(path, index=False)
+    vocab = build_subword_vocab(path, min_count=2)
+    assert "5" in vocab and "6" not in vocab and "7" not in vocab
+    assert vocab["<pad>"] == 0 and vocab["<unk>"] == 1

@@ -35,11 +35,23 @@ import pyarrow.parquet as pq
 import torch
 from torch.utils.data import IterableDataset, get_worker_info
 
-from .anticipation import N_DUR, row_example
+from .anticipation import N_DUR, NONE, row_example, subword_example
 
 PAD, UNK, BOS = 0, 1, 2
 _SPECIALS = ["<pad>", "<unk>", "<bos>"]
 PAD_LANG = 2          # padded positions must not look like first-language
+assert NONE == PAD_LANG          # NONE pieces and padding share the "no language" slot
+
+_SUBWORD_COLUMNS = ["row_id", "first_language", "second_language", "quality",
+                    "piece_ids", "piece_lang"]
+COLUMNS = {"word": None, "subword": _SUBWORD_COLUMNS}      # None = word defaults
+DEFAULT_PATHS = {"word": "data/tagged.parquet", "subword": "data/subword.parquet"}
+VOCAB_PATHS = {"word": "data/vocab_anticipation.json",
+               "subword": "data/vocab_subword.json"}
+
+
+def example_for(unit: str):
+    return {"word": row_example, "subword": subword_example}[unit]
 
 _COLUMNS = ["row_id", "tokens", "token_lang", "first_language",
             "second_language", "quality"]
@@ -52,14 +64,14 @@ def in_split(row_id: int, split: str) -> bool:
 
 
 def iter_rows(path: str, split: str = "train", batch_rows: int = 512,
-              languages=None, qualities=None):
+              languages=None, qualities=None, columns=None):
     """Yield one dict per row, streaming. Never holds more than one batch."""
     info = get_worker_info()
     wid, nworkers = (info.id, info.num_workers) if info else (0, 1)
 
     pf = pq.ParquetFile(path)
     # is_entity only exists in parquets tagged after the names-policy change.
-    cols = _COLUMNS + (["is_entity"] if "is_entity" in pf.schema_arrow.names else [])
+    cols = columns or (_COLUMNS + (["is_entity"] if "is_entity" in pf.schema_arrow.names else []))
     for bi, batch in enumerate(pf.iter_batches(batch_size=batch_rows, columns=cols)):
         if bi % nworkers != wid:
             continue
@@ -91,9 +103,35 @@ def build_vocab(path: str, max_size: int = 50_000, split: str = "train",
     return vocab
 
 
+def build_subword_vocab(path: str, max_size: int = 100_000, split: str = "train",
+                        min_count: int = 2) -> dict[str, int]:
+    """Compact vocabulary of XLM-R piece ids seen in the TRAIN split.
+
+    Keys are ``str(xlmr_id)`` (JSON keys must be strings). The compact table
+    keeps the from-scratch model's embedding matrix small; a pretrained XLM-R
+    backbone uses the raw ids instead.
+    """
+    from .subword import XLMR_VOCAB
+    counts = np.zeros(XLMR_VOCAB, dtype=np.int64)
+    for row in iter_rows(path, split=split, columns=_SUBWORD_COLUMNS):
+        counts += np.bincount(np.asarray(row["piece_ids"], dtype=np.int64),
+                              minlength=XLMR_VOCAB)
+    vocab = {tok: i for i, tok in enumerate(_SPECIALS)}
+    for pid in np.argsort(-counts, kind="stable"):
+        if counts[pid] < min_count or len(vocab) >= max_size:
+            break
+        vocab[str(int(pid))] = len(vocab)
+    return vocab
+
+
 def encode(words, vocab) -> np.ndarray:
     return np.fromiter((vocab.get(w.lower(), UNK) for w in words),
                        dtype=np.int64, count=len(words))
+
+
+def encode_pieces(ids, vocab) -> np.ndarray:
+    return np.fromiter((vocab.get(str(int(i)), UNK) for i in ids),
+                       dtype=np.int64, count=len(ids))
 
 
 class SwitchWindowDataset(IterableDataset):
@@ -102,12 +140,16 @@ class SwitchWindowDataset(IterableDataset):
     Each yielded window is a dict of length-``window`` arrays. ``sw_mask``
     marks positions that are scored; a position is scored only when it has a
     defined label AND a full prefix inside this window.
+
+    ``unit="subword"`` streams ``data/subword.parquet``: ``word_ids`` hold compact
+    piece ids, and NONE pieces are unscored inputs.
     """
 
     def __init__(self, path: str, vocab: dict[str, int], split: str = "train",
                  window: int = 256, stride: int = 192, shuffle_buffer: int = 4096,
                  seed: int = 0, languages=None, qualities=None,
-                 batch_rows: int = 512, pair_index: dict[str, int] | None = None):
+                 batch_rows: int = 512, pair_index: dict[str, int] | None = None,
+                 unit: str = "word"):
         assert 0 < stride <= window
         self.path, self.vocab, self.split = path, vocab, split
         self.window, self.stride = window, stride
@@ -116,10 +158,12 @@ class SwitchWindowDataset(IterableDataset):
         self.languages, self.qualities = languages, qualities
         self.batch_rows = batch_rows
         self.pair_index = pair_index or {}
+        self.unit = unit
 
     def _windows(self, ex):
         w, s = self.window, self.stride
-        ids = encode(ex["words"], self.vocab)
+        ids = (encode_pieces(ex["ids"], self.vocab) if self.unit == "subword"
+               else encode(ex["words"], self.vocab))
         langs = ex["langs"].astype(np.int64)
         n = len(ids)
         pair = self.pair_index.get(ex["first_language"], 0)
@@ -161,9 +205,10 @@ class SwitchWindowDataset(IterableDataset):
             first = False
 
     def _stream(self):
+        make = example_for(self.unit)
         for row in iter_rows(self.path, self.split, self.batch_rows,
-                             self.languages, self.qualities):
-            ex = row_example(row)
+                             self.languages, self.qualities, columns=COLUMNS[self.unit]):
+            ex = make(row)
             if ex is None:
                 continue
             yield from self._windows(ex)
