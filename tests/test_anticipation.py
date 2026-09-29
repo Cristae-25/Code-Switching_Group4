@@ -447,3 +447,27 @@ def test_word_rows_share_only_non_cjk_words():
     ex = row_example(dict(row_id=0, first_language="Chinese", second_language="English", quality="exact",
                           tokens=["我", "想", "go", "home", "你"], token_lang=["Chinese", "Chinese", "English", "English", "Chinese"]))
     assert list(ex["shared"]) == [False, False, True, True, False]
+
+
+def test_each_pretrained_model_has_its_own_labels_and_outputs():
+    mod = _train_script()
+    paths = {}
+    for model in ("xlmr", "roberta", "mbert"):
+        a = mod.resolve_defaults(_args(model=model, unit="subword"))
+        paths[model] = (a.path, a.out, a.ckpt)
+        assert a.lr == 2e-5
+    assert paths["roberta"][0] == "data/subword_roberta.parquet"
+    assert paths["mbert"][0] == "data/subword_mbert.parquet"
+    assert paths["xlmr"][0] == "data/subword.parquet"
+    assert len({p for trio in paths.values() for p in trio}) == 9     # nothing shared
+
+
+def test_score_adds_the_shared_positions_report():
+    mod = _train_script()
+    res = dict(logit=np.array([2.0, -2.0, 2.0, -2.0]), y=np.array([1, 0, 0, 0]),
+               pair=np.array([0, 0, 0, 0]), lang=np.array([0, 0, 1, 1]),
+               shared=np.array([True, True, False, False]),
+               dtrue=np.array([0]), dpred=np.array([0]))
+    rep = mod.score(res, 0.5)
+    assert rep["overall"]["fp"] == 1 and rep["shared"]["overall"]["fp"] == 0
+    assert rep["shared"]["overall"]["n"] == 2 and "duration" not in rep["shared"]

@@ -47,10 +47,10 @@ def main() -> None:
     ck = torch.load(args.ckpt, map_location="cpu", weights_only=False)
     a = ck["args"]
     unit = a.get("unit", "word")          # checkpoints from before --unit are word models
-    path = args.path or DEFAULT_PATHS[unit]
+    path = args.path or a.get("path") or DEFAULT_PATHS[unit]
     state = ck["state"]
-    xlmr = a.get("model", "scratch") == "xlmr"
-    vocab = None if xlmr else json.load(open(args.vocab or VOCAB_PATHS[unit]))
+    pretrained = a.get("model", "scratch") != "scratch"
+    vocab = None if pretrained else json.load(open(args.vocab or VOCAB_PATHS[unit]))
     model = build_model(a, ck["vocab_size"], n_pairs=14,
                         use_pair=state.get("pair_emb.weight") is not None,
                         use_lang=state.get("lang_emb.weight") is not None,

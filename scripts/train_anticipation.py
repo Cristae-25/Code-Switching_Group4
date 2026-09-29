@@ -35,7 +35,6 @@ from src.metrics import prf  # noqa: E402
 from src.models import build_model  # noqa: E402
 from src.streaming import (DEFAULT_PATHS, VOCAB_PATHS, build_subword_vocab,  # noqa: E402
                            build_vocab, make_loader)
-from src.subword import XLMR_VOCAB  # noqa: E402
 
 UNIT_DEFAULTS = {"word": dict(window=256, stride=192, vocab_size=50_000,
                               out="data/anticipation_word.json",
@@ -45,7 +44,14 @@ UNIT_DEFAULTS = {"word": dict(window=256, stride=192, vocab_size=50_000,
                                  ckpt="models/anticipation_subword.pt")}
 MODEL_DEFAULTS = {"scratch": dict(lr=3e-4),
                   "xlmr": dict(lr=2e-5, out="data/anticipation_xlmr.json",
-                               ckpt="models/anticipation_xlmr.pt")}
+                               ckpt="models/anticipation_xlmr.pt"),
+                  "roberta": dict(lr=2e-5, path="data/subword_roberta.parquet",
+                                  out="data/anticipation_roberta.json",
+                                  ckpt="models/anticipation_roberta.pt"),
+                  "mbert": dict(lr=2e-5, path="data/subword_mbert.parquet",
+                                out="data/anticipation_mbert.json",
+                                ckpt="models/anticipation_mbert.pt")}
+PRETRAINED = ("xlmr", "roberta", "mbert")    # each reads its own tokenizer's pieces
 PAIRS = ["Cantonese", "Arabic", "Philippines", "German", "Chinese", "Vietnamese",
          "Malay", "Japanese", "Hindi", "Korean", "Spanish", "French", "Russian",
          "Italian"]
@@ -55,8 +61,8 @@ PAIR_INDEX = {p: i for i, p in enumerate(PAIRS)}
 def resolve_defaults(args):
     """Fill model- and unit-dependent defaults; no run overwrites another model's files."""
     model = getattr(args, "model", "scratch")
-    if model == "xlmr" and args.unit != "subword":
-        raise SystemExit("--model xlmr reads XLM-R pieces: use --unit subword")
+    if model in PRETRAINED and args.unit != "subword":
+        raise SystemExit(f"--model {model} reads sub-word pieces: use --unit subword")
     for k, v in {**UNIT_DEFAULTS[args.unit], **MODEL_DEFAULTS[model]}.items():
         if getattr(args, k, None) is None:
             setattr(args, k, v)
@@ -66,8 +72,8 @@ def resolve_defaults(args):
         # data/subword.parquet was built with the default names policy baked in.
         raise SystemExit("--names only applies to --unit word: the sub-word labels were "
                          "built with script_words (use kaggle/load_labels.ipynb for others)")
-    if args.window > 512 and model == "xlmr":
-        raise SystemExit("XLM-R reads at most 512 positions: use --window 512 or less")
+    if args.window > 512 and model in PRETRAINED:
+        raise SystemExit("pretrained encoders read at most 512 positions: use --window 512 or less")
     return args
 
 
@@ -90,7 +96,7 @@ def autocast(dev):
 def evaluate(model, loader, dev, max_batches=0):
     """Logits and labels at every scored position, with pair and direction."""
     model.eval()
-    out = {k: [] for k in ("logit", "y", "pair", "lang", "dtrue", "dpred")}
+    out = {k: [] for k in ("logit", "y", "pair", "lang", "dtrue", "dpred", "shared")}
     for i, b in enumerate(loader):
         if max_batches and i >= max_batches:
             break
@@ -105,6 +111,7 @@ def evaluate(model, loader, dev, max_batches=0):
         if dm.any():
             out["dtrue"].append(b["y_dur"][dm].numpy())
             out["dpred"].append(dur.float().cpu()[dm].argmax(-1).numpy())
+        out["shared"].append(b["shared_mask"][m].numpy())
     return {k: np.concatenate(v) if v else np.empty(0) for k, v in out.items()}
 
 
@@ -125,14 +132,20 @@ def tune_threshold(prob, truth):
 
 
 def score(res, tau):
+    """The full report, plus ``shared``: the same report on the positions every
+    model shares (the last piece of each non-CJK word), comparable across tokenizers."""
     pred = (1 / (1 + np.exp(-res["logit"])) >= tau).astype(int)
-    return full_report(res["y"], pred, res["pair"], res["lang"], res["dtrue"], res["dpred"])
+    rep = full_report(res["y"], pred, res["pair"], res["lang"], res["dtrue"], res["dpred"])
+    sh = np.asarray(res.get("shared", np.zeros(len(pred), bool)), dtype=bool)
+    if sh.any():
+        rep["shared"] = full_report(res["y"][sh], pred[sh], res["pair"][sh], res["lang"][sh])
+    return rep
 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--model", choices=["scratch", "xlmr"], default="scratch")
-    ap.add_argument("--xlmr-name", default="xlm-roberta-base")
+    ap.add_argument("--model", choices=["scratch", *PRETRAINED], default="scratch")
+    ap.add_argument("--backbone", default=None, help="override the Hugging Face checkpoint")
     ap.add_argument("--path", default=None)
     ap.add_argument("--build-vocab", action="store_true")
     ap.add_argument("--vocab-size", type=int, default=None)
@@ -143,8 +156,8 @@ def main() -> None:
     ap.add_argument("--d-model", type=int, default=256)
     ap.add_argument("--layers", type=int, default=4)
     ap.add_argument("--heads", type=int, default=4)
-    ap.add_argument("--lr", type=float, default=None, help="default: 3e-4 scratch, 2e-5 xlmr")
-    ap.add_argument("--head-lr", type=float, default=1e-3, help="xlmr: learning rate of the two heads")
+    ap.add_argument("--lr", type=float, default=None, help="default: 3e-4 scratch, 2e-5 pretrained")
+    ap.add_argument("--head-lr", type=float, default=1e-3, help="pretrained: learning rate of the heads")
     ap.add_argument("--dur-weight", type=float, default=0.3)
     ap.add_argument("--workers", type=int, default=0)
     ap.add_argument("--device", default="auto")
@@ -168,8 +181,8 @@ def main() -> None:
     resolve_defaults(args)
     use_lang = not (args.no_lang or args.unit == "subword")
 
-    if args.model == "xlmr":
-        vocab, vocab_size = None, XLMR_VOCAB          # raw XLM-R ids, no vocabulary
+    if args.model in PRETRAINED:
+        vocab, vocab_size = None, None                # raw piece ids; size from the backbone
     else:
         vocab_path = VOCAB_PATHS[args.unit]
         if args.build_vocab or not os.path.exists(vocab_path):
@@ -182,8 +195,7 @@ def main() -> None:
             print(f"  {len(vocab):,} types in {time.time()-t0:.0f}s -> {vocab_path}")
         vocab = json.load(open(vocab_path))
         vocab_size = len(vocab)
-    print(f"model {args.model} | unit {args.unit} | vocab {vocab_size:,} | "
-          f"language input {'on' if use_lang else 'off'}")
+
 
     train_langs = [x.strip() for x in args.train_langs.split(",") if x.strip()]
     holdout = [p for p in PAIRS if p not in train_langs] if train_langs else []
@@ -195,6 +207,9 @@ def main() -> None:
     model = build_model(vars(args), vocab_size, n_pairs=len(PAIRS),
                         use_pair=args.model == "scratch" and not (args.no_pair or bool(holdout)),
                         use_lang=use_lang)
+    vocab_size = vocab_size or model.vocab_size
+    print(f"model {args.model} | unit {args.unit} | {args.path} | vocab {vocab_size:,} | "
+          f"language input {'on' if use_lang else 'off'}")
     n_param = sum(p.numel() for p in model.parameters())
     print(f"device {dev} | {n_param/1e6:.1f}M params")
 
@@ -212,7 +227,7 @@ def main() -> None:
     train_loader = loader("train", train_langs or None, args.workers)
     val_loader, test_loader = loader("val", train_langs or None), loader("test", train_langs or None)
 
-    if args.model == "xlmr":                           # pretrained body slow, new heads fast
+    if args.model in PRETRAINED:                       # pretrained body slow, new heads fast
         heads = [p for n, p in model.named_parameters() if n.startswith("head_")]
         body = [p for n, p in model.named_parameters() if not n.startswith("head_")]
         groups, lrs = [dict(params=body, lr=args.lr), dict(params=heads, lr=args.head_lr)], \
@@ -261,6 +276,9 @@ def main() -> None:
 
     report = score(evaluate(model, test_loader, dev, args.eval_batches), tau)
     print("\n" + format_report(report, f"TEST split - {args.model} ({args.unit})"))
+    if "shared" in report:
+        print("\n" + format_report(report["shared"], "SHARED positions (last piece of each "
+                                    "non-CJK word; comparable across tokenizers)"))
     payload = dict(model=args.model, unit=args.unit, **report, tau=tau, val_f1=vf1,
                    params=n_param, causality=chk, steps=step, args=vars(args))
     if holdout:
