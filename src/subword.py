@@ -17,16 +17,14 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-import regex
 
-from .anticipation import L1, L2, NONE, anticipatory_labels, token_slots
+from .anticipation import CJK, L1, L2, NONE, anticipatory_labels, token_slots
 from .tokenizer import tokenize_mixed
 
 XLMR_VOCAB = 250_002
 # Space markers: SentencePiece (XLM-R) "▁", byte-level BPE (RoBERTa) "Ġ" and "Ċ".
 # WordPiece (mBERT) has none; its "##" continuations are ordinary pieces.
 MARKERS = ("▁", "Ġ", "Ċ")
-_CJK = regex.compile(r"[\p{Han}\p{Hiragana}\p{Katakana}\p{Hangul}]")
 
 
 def is_blank(piece: str) -> bool:
@@ -89,7 +87,7 @@ def subword_row(utterances, tokens, token_lang, first_language: str,
     # Word ends: the last piece of each non-CJK word. Every tokenizer we use
     # splits at whitespace, so these are the same words for all of them - the
     # positions on which models with different tokenizers can be compared.
-    shared = {k for k, (t, s) in enumerate(zip(tokens, slots)) if s != NONE and not _CJK.search(t)}
+    shared = {k for k, (t, s) in enumerate(zip(tokens, slots)) if s != NONE and not CJK.search(t)}
     ids, pieces, langs, word_end, mixed = [], [], [], [], 0
     for u, text in enumerate(utterances):
         if not text:

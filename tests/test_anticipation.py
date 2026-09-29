@@ -434,3 +434,16 @@ def test_per_pair_hazard_falls_back_to_the_pooled_rate_when_unseen():
                  y_sw=np.array([1, 0]), pair=np.array([0, 0]))
     table = mod.fit_hazard_per_pair(train, n_pairs=2)
     assert table[1, 0, 1] == pytest.approx(0.5)            # pair 1 unseen: pooled rate
+
+
+def test_windows_carry_the_shared_mask():
+    ex = subword_example(dict(_sw_row([5, 6, 7, 8, 9], [0, 0, NONE, 1, 1]), word_end=[False, True, False, False, True]))
+    ds = SwitchWindowDataset("unused", None, window=8, stride=8, unit="subword")
+    w = next(iter(ds._windows(ex)))
+    assert list(w["shared_mask"][:5]) == [False, True, False, False, False]   # last piece: no label
+
+
+def test_word_rows_share_only_non_cjk_words():
+    ex = row_example(dict(row_id=0, first_language="Chinese", second_language="English", quality="exact",
+                          tokens=["我", "想", "go", "home", "你"], token_lang=["Chinese", "Chinese", "English", "English", "Chinese"]))
+    assert list(ex["shared"]) == [False, False, True, True, False]

@@ -32,8 +32,13 @@ Three decisions that materially change the numbers, made explicit:
 from __future__ import annotations
 
 import numpy as np
+import regex
 
 from .segments import DEFAULT_NAMES, absorb_other, resolve_names
+
+# Chinese, Japanese and Korean characters. Every tokenizer we use splits at
+# whitespace, so non-CJK words are the same units for all of them; CJK is not.
+CJK = regex.compile(r"[\p{Han}\p{Hiragana}\p{Katakana}\p{Hangul}]")
 
 # Language slots. The stream is binarised relative to the row's own pair, so a
 # model trained across pairs sees "first vs second language", not "Spanish vs
@@ -164,6 +169,7 @@ def row_example(row) -> dict | None:
         row_id=int(row["row_id"]),
         words=words,
         langs=langs,
+        shared=np.array([not CJK.search(w) for w in words], dtype=bool),
         first_language=row["first_language"],
         second_language=row["second_language"],
         quality=row.get("quality", "unknown"),
@@ -180,6 +186,8 @@ def subword_example(row) -> dict | None:
         row_id=int(row["row_id"]),
         ids=np.asarray(row["piece_ids"], dtype=np.int64),
         langs=langs,
+        shared=(np.asarray(row["word_end"], dtype=bool) if row.get("word_end") is not None
+                else np.zeros(len(langs), dtype=bool)),
         first_language=row["first_language"],
         second_language=row["second_language"],
         quality=row.get("quality", "unknown"),

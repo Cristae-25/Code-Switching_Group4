@@ -44,7 +44,7 @@ PAD_LANG = 2          # padded positions must not look like first-language
 assert NONE == PAD_LANG          # NONE pieces and padding share the "no language" slot
 
 _SUBWORD_COLUMNS = ["row_id", "first_language", "second_language", "quality",
-                    "piece_ids", "piece_lang"]
+                    "piece_ids", "piece_lang", "word_end"]
 COLUMNS = {"word": None, "subword": _SUBWORD_COLUMNS}      # None = word defaults
 DEFAULT_PATHS = {"word": "data/tagged.parquet", "subword": "data/subword.parquet"}
 VOCAB_PATHS = {"word": "data/vocab_anticipation.json",
@@ -72,7 +72,8 @@ def iter_rows(path: str, split: str = "train", batch_rows: int = 512,
 
     pf = pq.ParquetFile(path)
     # is_entity only exists in parquets tagged after the names-policy change.
-    cols = columns or (_COLUMNS + (["is_entity"] if "is_entity" in pf.schema_arrow.names else []))
+    names = pf.schema_arrow.names
+    cols = [c for c in (columns or _COLUMNS + ["is_entity"]) if c in names]   # optional columns
     for bi, batch in enumerate(pf.iter_batches(batch_size=batch_rows, columns=cols)):
         if bi % nworkers != wid:
             continue
@@ -199,6 +200,10 @@ class SwitchWindowDataset(IterableDataset):
             dur = np.zeros(w, dtype=bool)
             dur[:k] = ex["dur_known"][start:stop]
             out["dur_mask"] = dur & scored
+            sh = np.zeros(w, dtype=bool)
+            if "shared" in ex:                   # hand-built examples may omit it
+                sh[:k] = ex["shared"][start:stop]
+            out["shared_mask"] = sh & scored     # positions comparable across tokenizers
 
             out["pair_id"] = np.int64(pair)
             out["report_pair"] = np.int64(report)
@@ -241,7 +246,7 @@ def collate(batch):
     out = {}
     for key in ("word_ids", "lang_ids", "y_sw", "y_dur"):
         out[key] = torch.from_numpy(np.stack([b[key] for b in batch]))
-    for key in ("sw_mask", "dur_mask"):
+    for key in ("sw_mask", "dur_mask", "shared_mask"):
         out[key] = torch.from_numpy(np.stack([b[key] for b in batch]))
     for key in ("pair_id", "report_pair", "row_id"):
         out[key] = torch.tensor([int(b[key]) for b in batch])

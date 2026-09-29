@@ -258,3 +258,21 @@ def test_word_end_marks_the_last_piece_of_each_non_cjk_word(name):
     last = [max(i for i, (s, e) in enumerate(offs) if s < b and a < e)
             for a, b in [(0, 4), (5, 10), (17, 23)]]
     assert [i for i, f in enumerate(row["word_end"]) if f] == last
+
+
+@pytest.mark.parametrize("name", ["xlm-roberta-base", "roberta-base", "bert-base-multilingual-cased"])
+def test_word_and_piece_streams_score_the_same_shared_positions(name):
+    from src.anticipation import row_example, subword_example
+    tk = _load(name)
+    text = "Ayer vi a Leo , and it was amazing 你好 honestly bueno"
+    toks = tokenize_mixed(text)
+    labs = ["Spanish"] * 4 + ["other"] + ["English"] * 4 + ["Chinese", "Chinese", "English", "Spanish"]
+    base = dict(row_id=0, first_language="Spanish", second_language="English", quality="p")
+    word = row_example(dict(base, tokens=toks, token_lang=labs, is_entity=[False] * len(toks)))
+    sw = subword_row([text], toks, labs, "Spanish", "English", tk)
+    piece = subword_example(dict(base, piece_ids=sw["piece_ids"], piece_lang=sw["piece_lang"],
+                                 word_end=sw["word_end"]))
+    w_shared = word["shared"] & (word["y_sw"] >= 0)
+    p_shared = piece["shared"] & (piece["y_sw"] >= 0)
+    assert w_shared.sum() == p_shared.sum() == 9            # 10 non-CJK words, last one unlabelled
+    assert list(word["y_sw"][w_shared]) == list(piece["y_sw"][p_shared])   # same questions, same answers
