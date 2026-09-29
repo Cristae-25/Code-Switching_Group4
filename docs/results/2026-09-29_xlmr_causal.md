@@ -1,6 +1,6 @@
 # 2026-09-29: XLM-R with a causal mask, all 15 pairs (sub-word)
 
-**Run:** `kaggle/train_xlmr.ipynb` on a Kaggle T4. Model `xlm-roberta-base` with `is_decoder=True` (causal attention), 277.5 M parameters, plus a switch head and a 3-class duration head. The inputs are XLM-R pieces only, with no language input. `check_causality` gave 0.00 drift over 31 prefixes before training.
+**Run:** `kaggle/train_xlmr.ipynb` (now `kaggle/train_pretrained.ipynb` with `MODEL = "xlmr"`) on a Kaggle T4. Model `xlm-roberta-base` with `is_decoder=True` (causal attention), 277.5 M parameters, plus a switch head and a 3-class duration head. The inputs are XLM-R pieces only, with no language input. `check_causality` gave 0.00 drift over 31 prefixes before training.
 
 **Settings,** from the results file: 12,000 steps, batch 16, window 384 / stride 288, learning rate 2e-05 for the body and 0.001 for the heads, duration loss weight 0.3, trained on all pairs.
 

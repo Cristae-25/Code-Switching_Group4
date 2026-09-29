@@ -729,7 +729,7 @@ Since 2026-09-28, every model is scored with the same report (`src/evaluation.py
 - **The from-scratch transformer** reaches 0.513 on words and 0.453 on pieces, and is best on all 15 pairs.
 - **German→French** remains the hardest pair for both transformers and both pooled hazards. The per-pair hazards find Chinese→English (words) and French→English (pieces) harder.
 
-XLM-R with a causal mask is trained on Kaggle (`kaggle/train_xlmr.ipynb`), and its results file drops into the same table.
+The pretrained encoders (XLM-R, and next RoBERTa and mBERT) are trained on Kaggle with `kaggle/train_pretrained.ipynb`, and their results files drop into the same table.
 
 ### 4.8 XLM-R with a causal mask (2026-09-29)
 
@@ -789,7 +789,7 @@ The prediction in §1.4 that Italian would be the easiest and Korean the hardest
 
 **German→French, the diagnostic pair, transfers** (0.450, against 0.243 zero-shot for the from-scratch word model). "Anticipate a switch" and "anticipate English" are now separable, and the second is only part of what XLM-R learned. The remaining −0.21 gap is still the argument for a second non-English second language (§5.3 item 2).
 
-The from-scratch zero-shot figure in §4.5 is word-level, from the earlier report, with the German pairs merged. A piece-level from-scratch zero-shot run with the current report is the pending like-for-like comparison.
+**Like for like.** A from-scratch model on the same pieces, same 10 training languages and same report, scores held-out F1 **0.330**: 26% below its trained-on 0.447, and German→French 0.194 (always-switching 0.167). XLM-R's zero-shot advantage (+0.30) is larger than its in-distribution advantage (+0.19). Pretraining matters most exactly where universality is tested.
 
 ## 5. Next Steps — challenges with sub-word tokenization and Language-ID→segment mapping
 

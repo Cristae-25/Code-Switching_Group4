@@ -118,7 +118,7 @@ piece          lang  y_sw  y_len  y_dur
 ./.venv/bin/python scripts/train_anticipation.py --build-vocab --path data/tagged_shuffled.parquet --steps 6000   # ~23 min on an M3
 ./.venv/bin/python scripts/baseline_anticipation.py --unit subword                    # the same baselines on XLM-R pieces
 ./.venv/bin/python scripts/train_anticipation.py --unit subword --build-vocab --steps 6000   # pieces only, no language input (~35 min)
-./.venv/bin/python scripts/train_anticipation.py --model xlmr --unit subword --steps 12000 --batch-size 16  # GPU: use kaggle/train_xlmr.ipynb
+./.venv/bin/python scripts/train_anticipation.py --model xlmr --unit subword --steps 12000 --batch-size 16  # GPU: use kaggle/train_pretrained.ipynb
 ./.venv/bin/python scripts/compare_models.py                                         # -> docs/model_comparison.md
 ./.venv/bin/python scripts/eval_anticipation_pair.py --ckpt models/anticipation_zeroshot.pt --l1 German --l2 French
 ./.venv/bin/python scripts/eval_public.py                # taggers vs human-annotated LinCE / Denglisch
@@ -146,10 +146,10 @@ Every model is trained and scored the same way, so the results are directly comp
 | from-scratch causal transformer | a small model (15 M parameters on words, 23 M on pieces) trained on our labels only |
 | **XLM-R + causal mask** | a pretrained multilingual model, fine-tuned (the target) |
 
-**Training XLM-R on Kaggle.**
-1. Upload `kaggle/train_xlmr.ipynb`, choose GPU T4 ×2, turn Internet on, and add the `HF_TOKEN` secret.
+**Training the pretrained models (XLM-R, RoBERTa, mBERT) on Kaggle.**
+1. Upload `kaggle/train_pretrained.ipynb`, set `MODEL` (`"xlmr"`, `"roberta"` or `"mbert"`), choose GPU T4 ×2, turn Internet on, and add the `HF_TOKEN` secret.
 2. Run All. Try `SMOKE = True` first.
-3. Download `data/anticipation_xlmr.json` from the Output tab into `data/`, then run `./.venv/bin/python scripts/compare_models.py`.
+3. Download `data/anticipation_<MODEL>.json` from the Output tab into `data/`, then run `./.venv/bin/python scripts/compare_models.py`.
 
 ## Repo layout
 
@@ -168,7 +168,7 @@ src/          library code
 scripts/      command-line entry points (see "Common commands")
 tests/        pytest suite; fixtures/ holds frozen model outputs for the name edge cases
 kaggle/       load_labels.ipynb: download our labels, choose word/sub-word + names policy (CPU)
-              train_xlmr.ipynb: fine-tune and evaluate causal XLM-R (GPU)
+              train_pretrained.ipynb: fine-tune and evaluate causal XLM-R / RoBERTa / mBERT (GPU)
               label_switchlingua.ipynb: re-label the corpus from scratch (GPU, T4x2)
 notebooks/    switch_eda.ipynb: when switches happen and how long they last, by pair and persona
 docs/         write-ups (start here)

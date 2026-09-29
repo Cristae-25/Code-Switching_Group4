@@ -1,6 +1,6 @@
 # 2026-09-29: XLM-R with a causal mask, zero-shot (4 languages held out)
 
-**Run:** `kaggle/train_xlmr.ipynb` with `ZERO_SHOT = True`, on a Kaggle T4. The settings match the [all-pairs run](2026-09-29_xlmr_causal.md): 12,000 steps, batch 16, window 384 / stride 288, learning rate 2e-5 for the body and 1e-3 for the heads, pieces only. The causality check passed.
+**Run:** `kaggle/train_xlmr.ipynb` (now `kaggle/train_pretrained.ipynb` with `MODEL = "xlmr"`) with `ZERO_SHOT = True`, on a Kaggle T4. The settings match the [all-pairs run](2026-09-29_xlmr_causal.md): 12,000 steps, batch 16, window 384 / stride 288, learning rate 2e-5 for the body and 1e-3 for the heads, pieces only. The causality check passed.
 
 **Design** (report §1.4):
 - **Trained on 10 first languages:** Cantonese, Arabic, Tagalog (Philippines), Chinese, Vietnamese, Malay, Japanese, Russian, Spanish, French.
@@ -38,4 +38,13 @@ The same model on its 10 **trained** pairs scores F1 0.634 (macro 0.656).
   - The from-scratch word model scored 0.243 there, against 0.212 for always-switching, which is essentially no signal.
   - So the report's conclusion that the model learned "anticipate English" rather than "anticipate a switch" (§4.5) is **partly overturned** by a pretrained multilingual model.
   - It is still the largest drop (−0.208, and 0.203 below German→English from the same held-out first language), so the English bias is weaker but still present.
-- **Caveat.** The from-scratch zero-shot result (held-out F1 0.383) was scored on words with the earlier report, with the two German pairs merged. The like-for-like comparison is a piece-level from-scratch zero-shot run with the current report, which has not been run yet.
+- **Like-for-like check (run 2026-09-29).** A from-scratch model on the same pieces, trained on the same 10 languages and scored with the same report, reaches held-out F1 **0.330** (macro 0.322). That is 26% below its own trained-on score of 0.447. Per pair: Hindi 0.372, Italian 0.366, German→English 0.359, Korean 0.318, German→French **0.194**, barely above always-switching (0.167). XLM-R's advantage zero-shot (+0.30) is therefore larger than in-distribution (+0.19). The earlier word-level figure (0.383, German pairs merged) tells the same story. Record: [`2026-09-29_scratch_subword_zeroshot.json`](2026-09-29_scratch_subword_zeroshot.json).
+
+| Held-out pair | From-scratch zero-shot (pieces) | **XLM-R zero-shot** |
+|---|---:|---:|
+| Korean | 0.318 | **0.775** |
+| Italian | 0.366 | **0.661** |
+| German→English | 0.359 | **0.653** |
+| Hindi | 0.372 | **0.595** |
+| German→French | 0.194 | **0.450** |
+| **All held out** | 0.330 | **0.625** |
