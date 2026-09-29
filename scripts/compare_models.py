@@ -26,6 +26,8 @@ DEFAULT_SPECS = [
     "data/baseline_anticipation.json:hazard_pair@tuned:hazard, per pair (words)",
     "data/baseline_anticipation_subword.json:hazard@tuned:hazard, pooled (pieces)",
     "data/baseline_anticipation_subword.json:hazard_pair@tuned:hazard, per pair (pieces)",
+    "data/baseline_anticipation_roberta.json:hazard_pair@tuned:hazard, per pair (RoBERTa pieces)",
+    "data/baseline_anticipation_mbert.json:hazard_pair@tuned:hazard, per pair (mBERT pieces)",
     "data/anticipation_word.json",
     "data/anticipation_model_subword.json",
     "data/anticipation_xlmr.json",
