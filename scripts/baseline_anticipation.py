@@ -39,6 +39,7 @@ from src.anticipation import L2, NONE, N_DUR, DUR_LABELS  # noqa: E402
 from src.metrics import (by_group, confusion_table, duration_scores, fmt_table,  # noqa: E402
                          macro_f1, prf, wilson)
 from src.streaming import COLUMNS, DEFAULT_PATHS, example_for, iter_rows  # noqa: E402
+from src.evaluation import PAIR_KEYS, format_report, full_report, pair_key  # noqa: E402
 
 RUNPOS_CAP = 10          # run-position feature is capped; the tail is flat
 
@@ -76,21 +77,11 @@ def collect(path: str, split: str, limit: int | None = None, unit: str = "word")
         y_sw.append(ex["y_sw"][m].astype(np.int64))
         y_dur.append(ex["y_dur"][m].astype(np.int64))
         dur_ok.append(ex["dur_known"][m])
-        pair.append(np.full(int(m.sum()), _pair_id(ex["first_language"],
-                                                   ex["second_language"])))
+        pair.append(np.full(int(m.sum()), PAIR_KEYS.index(
+            pair_key(ex["first_language"], ex["second_language"]))))
     cat = lambda xs: np.concatenate(xs) if xs else np.empty(0, np.int64)  # noqa: E731
     return dict(cur_lang=cat(cur_lang), runpos=cat(runpos), y_sw=cat(y_sw),
                 y_dur=cat(y_dur), dur_ok=cat(dur_ok).astype(bool), pair=cat(pair))
-
-
-_PAIRS: list[str] = []
-
-
-def _pair_id(a: str, b: str) -> int:
-    key = f"{a}->{b}"
-    if key not in _PAIRS:
-        _PAIRS.append(key)
-    return _PAIRS.index(key)
 
 
 def fit_hazard(train: dict) -> np.ndarray:
@@ -101,6 +92,32 @@ def fit_hazard(train: dict) -> np.ndarray:
             m = (train["cur_lang"] == lang) & (train["runpos"] == pos)
             table[lang, pos] = train["y_sw"][m].mean() if m.any() else 0.0
     return table
+
+
+def fit_hazard_per_pair(train: dict, n_pairs: int = len(PAIR_KEYS),
+                        min_count: int = 1) -> np.ndarray:
+    """The same hazard fitted separately for each language pair: table[pair, lang, pos].
+
+    A cell with fewer than ``min_count`` training positions falls back to the
+    pooled rate, so an unseen (pair, language, run length) is never a silent 0.
+    """
+    pooled = fit_hazard(train)
+    table = np.repeat(pooled[None], n_pairs, axis=0)
+    for p in range(n_pairs):
+        mp = train["pair"] == p
+        for lang in (0, 1):
+            for pos in range(1, RUNPOS_CAP + 1):
+                m = mp & (train["cur_lang"] == lang) & (train["runpos"] == pos)
+                if m.sum() >= min_count:
+                    table[p, lang, pos] = train["y_sw"][m].mean()
+    return table
+
+
+def tune_on_val(prob_val, y_val, candidates):
+    """F1-maximising threshold on VAL (never on test)."""
+    grid = np.unique(np.round(np.sort(np.ravel(candidates)), 6))
+    grid = grid[grid > 0]
+    return max((prf(y_val, (prob_val >= t).astype(np.int64))["f1"], float(t)) for t in grid)
 
 
 def fit_duration(train: dict) -> np.ndarray:
@@ -150,15 +167,13 @@ def main() -> None:
     hazard = fit_hazard(train)
     rng = np.random.default_rng(0)
 
-    # Tune the hazard threshold on VAL, never on test.
-    val_p = hazard[val["cur_lang"], val["runpos"]]
-    grid = np.unique(np.round(np.sort(hazard.ravel()), 6))
-    grid = grid[grid > 0]
-    scored = [(prf(val["y_sw"], (val_p >= t).astype(np.int64))["f1"], float(t))
-              for t in grid]
-    best_f1, tau = max(scored)
-    print(f"hazard threshold tuned on val: tau={tau:.3f} (val F1 {best_f1:.3f})\n",
-          flush=True)
+    # Tune both hazard thresholds on VAL, never on test.
+    best_f1, tau = tune_on_val(hazard[val["cur_lang"], val["runpos"]], val["y_sw"], hazard)
+    hz_pair = fit_hazard_per_pair(train)
+    pair_f1, tau_pair = tune_on_val(hz_pair[val["pair"], val["cur_lang"], val["runpos"]],
+                                    val["y_sw"], hz_pair)
+    print(f"hazard threshold tuned on val: tau={tau:.3f} (val F1 {best_f1:.3f}) | "
+          f"per-pair hazard: tau={tau_pair:.3f} (val F1 {pair_f1:.3f})\n", flush=True)
 
     preds = {
         "never": np.zeros_like(test["y_sw"]),
@@ -167,35 +182,29 @@ def main() -> None:
         "naive_l2": (test["cur_lang"] == L2).astype(np.int64),
         "hazard@0.5": (hazard[test["cur_lang"], test["runpos"]] >= args.threshold).astype(np.int64),
         "hazard@tuned": (hazard[test["cur_lang"], test["runpos"]] >= tau).astype(np.int64),
+        "hazard_pair@tuned": (hz_pair[test["pair"], test["cur_lang"], test["runpos"]]
+                              >= tau_pair).astype(np.int64),
     }
 
     rows, detail = [], {}
     for name, yp in preds.items():
-        s = prf(test["y_sw"], yp)
-        groups = by_group(test["y_sw"], yp, test["pair"])
-        named = {_PAIRS[int(k)]: v for k, v in groups.items()}
-        lo, hi = wilson(s["tp"], s["tp"] + s["fp"]) if s["tp"] + s["fp"] else (0, 0)
+        rep = full_report(test["y_sw"], yp, test["pair"], test["cur_lang"])
+        s = rep["overall"]
+        lo, hi = s["precision_ci"]
         rows.append(dict(model=name,
                          P=f"{s['precision']:.3f}", R=f"{s['recall']:.3f}",
-                         F1=f"{s['f1']:.3f}", macroF1=f"{macro_f1(named):.3f}",
+                         F1=f"{s['f1']:.3f}", macroF1=f"{rep['macro_f1']:.3f}",
                          acc=f"{s['accuracy']:.3f}",
                          prec95=f"[{lo:.3f},{hi:.3f}]"))
-        detail[name] = dict(overall=s, per_pair=named, macro_f1=macro_f1(named))
+        detail[name] = rep
 
     print(fmt_table(rows, ["model", "P", "R", "F1", "macroF1", "acc", "prec95"],
                     f"Anticipatory switch prediction - TEST split "
                     f"(base rate {test['y_sw'].mean():.4f})"))
 
     # Per-direction, for the best training-free baseline.
-    print("\nDirectional breakdown (hazard@tuned):")
-    dirs = []
-    for lang, label in ((0, "L1->L2"), (1, "L2->L1")):
-        m = test["cur_lang"] == lang
-        s = prf(test["y_sw"][m], preds["hazard@tuned"][m])
-        dirs.append(dict(direction=label, n=f"{s['n']:,}",
-                         base=f"{s['base_rate']:.4f}", P=f"{s['precision']:.3f}",
-                         R=f"{s['recall']:.3f}", F1=f"{s['f1']:.3f}"))
-    print(fmt_table(dirs, ["direction", "n", "base", "P", "R", "F1"]))
+    for name in ("hazard@tuned", "hazard_pair@tuned"):
+        print("\n" + format_report(detail[name], f"{name}:"))
 
     print("\nHazard table  P(switch at t+1 | current run length so far):")
     hz = [dict(run_len=str(pos),
@@ -210,6 +219,8 @@ def main() -> None:
     d_true = test["y_dur"][m]
     d_pred = dur_mode[target_lang]
     ds = duration_scores(d_true, d_pred)
+    for name in ("hazard@tuned", "hazard_pair@tuned"):   # the training-free duration baseline
+        detail[name]["duration"] = ds
     print(f"\nDuration at oracle switch positions (n={ds['n']:,}), "
           f"mode-per-direction baseline:")
     print(f"  3-class accuracy {ds['accuracy']:.3f} | macro-F1 {ds['macro_f1']:.3f} "
@@ -233,7 +244,7 @@ def main() -> None:
         test_positions=int(len(test["y_sw"])),
         train_base_rate=float(base), test_base_rate=float(test["y_sw"].mean()),
         hazard_table=hazard.tolist(), duration_mode=dur_mode.tolist(),
-        duration=ds, pairs=_PAIRS, hazard_tau=float(tau),
+        duration=ds, pairs=PAIR_KEYS, hazard_tau=float(tau), hazard_pair_tau=float(tau_pair),
         val_positions=int(len(val["y_sw"])), hazard_val_f1=float(best_f1),
     )
     os.makedirs(os.path.dirname(args.json), exist_ok=True)

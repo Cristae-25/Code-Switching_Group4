@@ -407,3 +407,30 @@ def test_scheduler_handles_very_short_runs():
         sched = mod.make_scheduler(opt, [1e-3], steps)
         for _ in range(steps):
             opt.step(); sched.step()
+
+
+def _baseline_script():
+    import importlib.util, os
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    spec = importlib.util.spec_from_file_location(
+        "baseline_anticipation", os.path.join(root, "scripts", "baseline_anticipation.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_per_pair_hazard_learns_each_pairs_own_rates():
+    mod = _baseline_script()
+    # pair 0 switches out of L1 at run position 1 half the time, pair 1 never does
+    train = dict(cur_lang=np.array([0, 0, 0, 0, 0, 0]), runpos=np.array([1, 1, 1, 1, 1, 1]),
+                 y_sw=np.array([1, 0, 1, 0, 0, 0]), pair=np.array([0, 0, 0, 0, 1, 1]))
+    table = mod.fit_hazard_per_pair(train, n_pairs=2)
+    assert table[0, 0, 1] == pytest.approx(0.5) and table[1, 0, 1] == pytest.approx(0.0)
+
+
+def test_per_pair_hazard_falls_back_to_the_pooled_rate_when_unseen():
+    mod = _baseline_script()
+    train = dict(cur_lang=np.array([0, 0]), runpos=np.array([1, 1]),
+                 y_sw=np.array([1, 0]), pair=np.array([0, 0]))
+    table = mod.fit_hazard_per_pair(train, n_pairs=2)
+    assert table[1, 0, 1] == pytest.approx(0.5)            # pair 1 unseen: pooled rate
