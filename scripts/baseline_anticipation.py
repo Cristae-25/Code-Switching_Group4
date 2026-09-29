@@ -62,7 +62,7 @@ def run_position(langs: np.ndarray) -> np.ndarray:
 
 def collect(path: str, split: str, limit: int | None = None, unit: str = "word"):
     """Stream a split into flat arrays of causal features and labels."""
-    cur_lang, runpos, y_sw, y_dur, dur_ok, pair = [], [], [], [], [], []
+    cur_lang, runpos, y_sw, y_dur, dur_ok, pair, shared = [], [], [], [], [], [], []
     make = example_for(unit)
     for i, row in enumerate(iter_rows(path, split=split, columns=COLUMNS[unit])):
         if limit and i >= limit:
@@ -77,11 +77,13 @@ def collect(path: str, split: str, limit: int | None = None, unit: str = "word")
         y_sw.append(ex["y_sw"][m].astype(np.int64))
         y_dur.append(ex["y_dur"][m].astype(np.int64))
         dur_ok.append(ex["dur_known"][m])
+        shared.append(ex["shared"][m])
         pair.append(np.full(int(m.sum()), PAIR_KEYS.index(
             pair_key(ex["first_language"], ex["second_language"]))))
     cat = lambda xs: np.concatenate(xs) if xs else np.empty(0, np.int64)  # noqa: E731
     return dict(cur_lang=cat(cur_lang), runpos=cat(runpos), y_sw=cat(y_sw),
-                y_dur=cat(y_dur), dur_ok=cat(dur_ok).astype(bool), pair=cat(pair))
+                y_dur=cat(y_dur), dur_ok=cat(dur_ok).astype(bool), pair=cat(pair),
+                shared=cat(shared).astype(bool))
 
 
 def fit_hazard(train: dict) -> np.ndarray:
@@ -118,6 +120,15 @@ def tune_on_val(prob_val, y_val, candidates):
     grid = np.unique(np.round(np.sort(np.ravel(candidates)), 6))
     grid = grid[grid > 0]
     return max((prf(y_val, (prob_val >= t).astype(np.int64))["f1"], float(t)) for t in grid)
+
+
+def report_with_shared(y, yp, pair, lang, shared) -> dict:
+    """``full_report``, plus the same on the shared positions (non-CJK word ends)."""
+    rep = full_report(y, yp, pair, lang)
+    shared = np.asarray(shared, dtype=bool)
+    if shared.any():
+        rep["shared"] = full_report(y[shared], yp[shared], pair[shared], lang[shared])
+    return rep
 
 
 def fit_duration(train: dict) -> np.ndarray:
@@ -188,7 +199,7 @@ def main() -> None:
 
     rows, detail = [], {}
     for name, yp in preds.items():
-        rep = full_report(test["y_sw"], yp, test["pair"], test["cur_lang"])
+        rep = report_with_shared(test["y_sw"], yp, test["pair"], test["cur_lang"], test["shared"])
         s = rep["overall"]
         lo, hi = s["precision_ci"]
         rows.append(dict(model=name,

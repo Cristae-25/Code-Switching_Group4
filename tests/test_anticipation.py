@@ -471,3 +471,12 @@ def test_score_adds_the_shared_positions_report():
     rep = mod.score(res, 0.5)
     assert rep["overall"]["fp"] == 1 and rep["shared"]["overall"]["fp"] == 0
     assert rep["shared"]["overall"]["n"] == 2 and "duration" not in rep["shared"]
+
+
+def test_baseline_reports_include_the_shared_positions():
+    mod = _baseline_script()
+    y = np.array([1, 0, 1, 0]); yp = np.array([1, 1, 0, 0])
+    rep = mod.report_with_shared(y, yp, np.zeros(4, int), np.array([0, 0, 1, 1]),
+                                 np.array([True, True, False, False]))
+    assert rep["overall"]["n"] == 4 and rep["shared"]["overall"]["n"] == 2
+    assert rep["shared"]["overall"]["tp"] == 1 and rep["shared"]["overall"]["fp"] == 1
