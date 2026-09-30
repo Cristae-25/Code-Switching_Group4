@@ -31,7 +31,7 @@ BACKBONES = {"xlmr": "xlm-roberta-base", "roberta": "roberta-base",
 
 class CausalPretrained(nn.Module):
     def __init__(self, name: str = "xlm-roberta-base", config=None, pretrained: bool = True,
-                 n_dur: int = N_DUR, dropout: float = 0.1):
+                 n_dur: int = N_DUR, dropout: float = 0.1, use_lang: bool = False):
         super().__init__()
         from transformers import AutoConfig, AutoModel
 
@@ -48,6 +48,12 @@ class CausalPretrained(nn.Module):
         assert self.encoder.config.is_decoder, "the encoder must run with a causal mask"
         self.vocab_size = self.encoder.config.vocab_size
         d = self.encoder.config.hidden_size
+        # Optional language input (--prev-lang): a learned embedding for the language of
+        # the last finished word (slots L1, L2, none), added to the piece embeddings.
+        # Initialised at zero, so training starts from the pretrained model unchanged.
+        self.lang_emb = nn.Embedding(3, d) if use_lang else None
+        if self.lang_emb is not None:
+            nn.init.zeros_(self.lang_emb.weight)
         self.drop = nn.Dropout(dropout)
         self.head_sw = nn.Linear(d, 1)
         self.head_dur = nn.Linear(d, n_dur)
@@ -55,7 +61,11 @@ class CausalPretrained(nn.Module):
     def forward(self, word_ids, lang_ids=None, pair_id=None):
         # use_cache=False: a decoder-mode encoder would otherwise build a key/value
         # cache on every call, which only costs memory here.
-        h = self.encoder(input_ids=word_ids, use_cache=False).last_hidden_state
+        if self.lang_emb is None:
+            h = self.encoder(input_ids=word_ids, use_cache=False).last_hidden_state
+        else:
+            emb = self.encoder.get_input_embeddings()(word_ids) + self.lang_emb(lang_ids)
+            h = self.encoder(inputs_embeds=emb, use_cache=False).last_hidden_state
         h = self.drop(h)
         return self.head_sw(h).squeeze(-1), self.head_dur(h)
 

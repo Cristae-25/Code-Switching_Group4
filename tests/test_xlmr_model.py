@@ -87,3 +87,14 @@ def test_build_model_picks_each_backbone():
         kind = "bert" if model == "mbert" else "roberta"
         m = build_model(dict(model=model), 300, xlmr_config=_tiny_cfg(kind))
         assert isinstance(m, CausalPretrained)
+
+
+def test_pretrained_models_can_take_a_language_input():
+    m = CausalPretrained(config=_tiny_cfg("roberta"), use_lang=True).eval()
+    assert m.lang_emb.weight.abs().sum() == 0            # starts as the unchanged pretrained model
+    torch.nn.init.normal_(m.lang_emb.weight)             # ... then check the input is wired in
+    x = torch.randint(5, 300, (1, 10))
+    a, _ = m(x, torch.zeros(1, 10, dtype=torch.long))
+    b, _ = m(x, torch.ones(1, 10, dtype=torch.long))
+    assert not torch.equal(a, b)                                  # the input is used
+    assert check_causality(m, 300, seq_len=24)["max_abs_logit_drift"] == 0.0
