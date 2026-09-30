@@ -63,7 +63,7 @@ The report (`src/evaluation.py`) covers switch P/R/F1 overall, per language pair
 3. **Settings cell:** set `MODEL`, then **Save Version → Save & Run All**, so the run continues if you close the browser.
    - Use `SMOKE = True` first for a quick check.
    - A full run of 12,000 steps took about 72 minutes on a T4 for XLM-R; RoBERTa and mBERT are smaller.
-4. **Collect the results:** from the version's Output tab, download `data/anticipation_<MODEL>.json` (and `_zeroshot.json`, if run) into the repo's `data/`. Then run `./.venv/bin/python scripts/compare_models.py`.
+4. **Collect the results:** from the version's Output tab, download `data/anticipation_<TAG>.json` (and `_zeroshot.json`, if run), plus `data/preds_<TAG>.npz`, into the repo's `data/`. `TAG` is the model name plus the tuning flags that are on (e.g. `xlmr_durw_prev`). Then run `./.venv/bin/python scripts/compare_models.py`. The saved predictions let thresholds be tuned locally with no GPU.
 """
 
 CONFIG = """
@@ -76,6 +76,12 @@ BATCH = 16
 WINDOW, STRIDE = 384, 288   # these encoders read at most 512 positions
 LR, HEAD_LR = 2e-5, 1e-3    # pretrained body vs. the two new heads
 EVAL_BATCHES = 0        # 0 = score the whole val and test splits
+# Tuning flags (all off = the baseline setup). See README "How models are evaluated".
+SEED = 0                # reproducible initialisation and data order
+DUR_WEIGHTS = "none"    # "balanced": class-weighted duration loss (weights from the train split)
+TURN_SEP = False        # separator piece between speaker turns
+PREV_LANG = False       # input: the language of the last finished word
+PREDICT_AT = "piece"    # "word_end": train and score only at the last piece of each word
 SAVE_CHECKPOINT = True  # 0.5-1.1 GB in /kaggle/working
 LABELS_REPO = "cristae/switchlingua-tagged-final"
 """
@@ -142,10 +148,16 @@ TRAIN = """
 steps, evalb = (60, 20) if SMOKE else (STEPS, EVAL_BATCHES)
 common = (f"python scripts/train_anticipation.py --model {MODEL} --unit subword "
           f"--steps {steps} --batch-size {BATCH} --window {WINDOW} --stride {STRIDE} "
-          f"--lr {LR} --head-lr {HEAD_LR} --eval-batches {evalb} --workers 2")
+          f"--lr {LR} --head-lr {HEAD_LR} --eval-batches {evalb} --workers 2 "
+          f"--seed {SEED} --dur-class-weights {DUR_WEIGHTS} --predict-at {PREDICT_AT}"
+          + (" --turn-sep" if TURN_SEP else "") + (" --prev-lang" if PREV_LANG else ""))
+TAG = MODEL + "".join(s for s, on in (("_durw", DUR_WEIGHTS != "none"), ("_sep", TURN_SEP),
+                                      ("_prev", PREV_LANG), ("_wend", PREDICT_AT == "word_end")) if on)
 if RUN_FULL:
-    print(common)
-    get_ipython().system(f"{common} 2>&1 | tee logs/train_{MODEL}.log")
+    cmd = (f"{common} --out data/anticipation_{TAG}.json --ckpt models/anticipation_{TAG}.pt "
+           f"--save-preds data/preds_{TAG}.npz")
+    print(cmd)
+    get_ipython().system(f"{cmd} 2>&1 | tee logs/train_{TAG}.log")
 else:
     print("RUN_FULL is off")
 """
@@ -154,16 +166,16 @@ ZS = """
 if ZERO_SHOT:
     langs = "Cantonese,Arabic,Philippines,Chinese,Vietnamese,Malay,Japanese,Russian,Spanish,French"
     cmd = (f"{common} --train-langs {langs} "
-           f"--out data/anticipation_{MODEL}_zeroshot.json --ckpt models/anticipation_{MODEL}_zeroshot.pt")
+           f"--out data/anticipation_{TAG}_zeroshot.json --ckpt models/anticipation_{TAG}_zeroshot.pt")
     print(cmd)
-    get_ipython().system(f"{cmd} 2>&1 | tee logs/train_{MODEL}_zeroshot.log")
+    get_ipython().system(f"{cmd} 2>&1 | tee logs/train_{TAG}_zeroshot.log")
 else:
     print("ZERO_SHOT is off")
 """
 
 RESULTS = """
 import json
-for f in (f"data/anticipation_{MODEL}.json", f"data/anticipation_{MODEL}_zeroshot.json"):
+for f in (f"data/anticipation_{TAG}.json", f"data/anticipation_{TAG}_zeroshot.json"):
     if not os.path.exists(f):
         continue
     r = json.load(open(f))
@@ -184,7 +196,7 @@ for f in (f"data/anticipation_{MODEL}.json", f"data/anticipation_{MODEL}_zerosho
 
 CLEANUP = """
 if not SAVE_CHECKPOINT:
-    for f in (f"models/anticipation_{MODEL}.pt", f"models/anticipation_{MODEL}_zeroshot.pt"):
+    for f in (f"models/anticipation_{TAG}.pt", f"models/anticipation_{TAG}_zeroshot.pt"):
         if os.path.exists(f):
             os.remove(f)
 if os.path.exists(PATH):                      # derived from the private labels: don't publish it
