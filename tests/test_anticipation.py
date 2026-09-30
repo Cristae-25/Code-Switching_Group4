@@ -480,3 +480,57 @@ def test_baseline_reports_include_the_shared_positions():
                                  np.array([True, True, False, False]))
     assert rep["overall"]["n"] == 4 and rep["shared"]["overall"]["n"] == 2
     assert rep["shared"]["overall"]["tp"] == 1 and rep["shared"]["overall"]["fp"] == 1
+
+
+# --- tuning flags: turn separators, previous-word language, word-end scoring ----
+
+def _rich_row(ids, langs, words, utts):
+    return dict(_sw_row(ids, langs), piece_word=words, piece_utt=utts, word_end=[w >= 0 for w in words])
+
+
+def test_turn_separator_is_inserted_and_changes_no_label():
+    row = _rich_row([5, 6, 7, 8], [0, 0, 1, 1], [0, 1, 2, 3], [0, 0, 1, 1])
+    plain, sep = subword_example(row), subword_example(row, turn_sep=True)
+    assert list(sep["ids"]) == [5, 6, -1, 7, 8] and list(sep["langs"]) == [0, 0, NONE, 1, 1]
+    real = [0, 1, 3, 4]                                  # the separator is position 2
+    assert list(sep["y_sw"][real]) == list(plain["y_sw"]) and sep["y_sw"][2] == -1
+    assert not sep["shared"][2] and not sep["unit_end"][2]
+
+
+def test_previous_word_language_uses_only_finished_words():
+    from src.streaming import PAD_LANG
+    row = _rich_row([5, 6, 7, 8, 9, 10], [0, 0, NONE, 1, 1, 1], [0, 0, -1, 1, 2, 2], [0] * 6)
+    ex = subword_example(row)
+    # word 0 has no finished word before it; the blank piece carries on; word 1 sees
+    # word 0 (L1); both pieces of word 2 see word 1 (L2), never word 2 itself.
+    assert list(ex["lang_in"]) == [PAD_LANG, PAD_LANG, PAD_LANG, 0, 1, 1]
+    assert list(ex["unit_end"]) == [False, True, False, True, False, True]
+
+
+def test_word_end_mode_scores_only_the_last_piece_of_each_word():
+    row = _rich_row([5, 6, 7, 8, 9, 10], [0, 0, NONE, 1, 1, 0], [0, 0, -1, 1, 2, 3], [0] * 6)
+    ex = subword_example(row)
+    ds = SwitchWindowDataset("unused", None, window=8, stride=8, unit="subword", predict_at="word_end")
+    w = next(iter(ds._windows(ex)))
+    assert list(w["sw_mask"][:6]) == [False, True, False, True, True, False]   # last: no label
+
+
+def test_previous_language_feeds_the_language_input():
+    row = _rich_row([5, 6, 7], [0, 1, 1], [0, 1, 2], [0, 0, 0])
+    ds = SwitchWindowDataset("unused", None, window=8, stride=8, unit="subword", lang_input="prev_word")
+    w = next(iter(ds._windows(subword_example(row))))
+    assert list(w["lang_ids"][:3]) == [2, 0, 1]
+
+
+def test_separator_ids_map_to_the_tokenizer_separator():
+    assert list(encode_pieces([5, -1, 7], None, sep_id=2)) == [5, 2, 7]
+    assert list(encode_pieces([17, -1], {"<pad>": 0, "<unk>": 1, "<bos>": 2, "17": 3})) == [3, 2]
+
+
+def test_direction_uses_the_current_language_even_with_prev_word_input():
+    row = _rich_row([5, 6, 7], [0, 1, 1], [0, 1, 2], [0, 0, 0])
+    ds = SwitchWindowDataset("unused", None, window=8, stride=8, unit="subword", lang_input="prev_word")
+    w = next(iter(ds._windows(subword_example(row))))
+    assert list(w["cur_lang"][:3]) == [0, 1, 1] and list(w["lang_ids"][:3]) == [2, 0, 1]
+    from src.streaming import collate
+    assert collate([w])["cur_lang"].shape == (1, 8)

@@ -177,17 +177,66 @@ def row_example(row) -> dict | None:
     )
 
 
-def subword_example(row) -> dict | None:
-    """Build one sub-word training example from a ``data/subword.parquet`` row."""
+def _word_features(words, langs):
+    """``unit_end`` (last piece of each word) and ``lang_in`` (the language of the
+    last *finished* word) for every piece.
+
+    ``lang_in`` at piece t only uses words that ended before t's own word
+    began, so it is a legal causal input: a word's language is known once all
+    of its pieces have been read. NONE (the pad slot) where no word has finished.
+    """
+    n = len(langs)
+    unit_end = np.zeros(n, dtype=bool)
+    lang_in = np.full(n, NONE, dtype=np.int8)
+    wlang, cur, done = {}, None, NONE
+    for i in range(n):
+        w = int(words[i])
+        if w >= 0 and w != cur:
+            if cur is not None and cur in wlang:
+                done = wlang[cur]
+            cur = w
+        if w >= 0 and langs[i] != NONE:
+            wlang.setdefault(w, langs[i])
+        lang_in[i] = done
+    nxt = None
+    for i in range(n - 1, -1, -1):
+        if words[i] >= 0:
+            unit_end[i] = words[i] != nxt
+            nxt = words[i]
+    return unit_end, lang_in
+
+
+def subword_example(row, turn_sep: bool = False) -> dict | None:
+    """Build one sub-word training example from a ``data/subword.parquet`` row.
+
+    ``turn_sep`` inserts a separator piece (id -1, language NONE, so no label
+    moves) before the first piece of every utterance after the first.
+    """
+    ids = np.asarray(row["piece_ids"], dtype=np.int64)
     langs = np.asarray(row["piece_lang"], dtype=np.int8)
+    n = len(ids)
+    shared = (np.asarray(row["word_end"], dtype=bool) if row.get("word_end") is not None
+              else np.zeros(n, dtype=bool))
+    words = np.asarray(row["piece_word"], dtype=np.int64) if row.get("piece_word") is not None else None
+    utts = np.asarray(row["piece_utt"], dtype=np.int64) if row.get("piece_utt") is not None else None
+    if turn_sep:
+        if utts is None:
+            raise ValueError("--turn-sep needs piece_utt: rebuild the labels with build_subword.py")
+        at = np.flatnonzero(np.r_[False, utts[1:] != utts[:-1]]) if n else np.empty(0, int)
+        ids, langs = np.insert(ids, at, -1), np.insert(langs, at, NONE)
+        shared = np.insert(shared, at, False)
+        if words is not None:
+            words = np.insert(words, at, -1)
     if int((langs != NONE).sum()) < 2:
         return None
+    unit_end, lang_in = _word_features(words, langs) if words is not None else (None, None)
     return dict(
         row_id=int(row["row_id"]),
-        ids=np.asarray(row["piece_ids"], dtype=np.int64),
+        ids=ids,
         langs=langs,
-        shared=(np.asarray(row["word_end"], dtype=bool) if row.get("word_end") is not None
-                else np.zeros(len(langs), dtype=bool)),
+        shared=shared,
+        unit_end=unit_end,
+        lang_in=lang_in,
         first_language=row["first_language"],
         second_language=row["second_language"],
         quality=row.get("quality", "unknown"),

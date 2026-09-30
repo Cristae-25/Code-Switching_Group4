@@ -106,7 +106,7 @@ def evaluate(model, loader, dev, max_batches=0):
         out["logit"].append(sw.float().cpu()[m].numpy())
         out["y"].append(b["y_sw"][m].numpy())
         out["pair"].append(b["report_pair"].unsqueeze(1).expand_as(m)[m].numpy())
-        out["lang"].append(b["lang_ids"][m].numpy())
+        out["lang"].append(b["cur_lang"][m].numpy())        # direction: current language
         dm = b["dur_mask"]
         if dm.any():
             out["dtrue"].append(b["y_dur"][dm].numpy())

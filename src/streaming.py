@@ -44,7 +44,7 @@ PAD_LANG = 2          # padded positions must not look like first-language
 assert NONE == PAD_LANG          # NONE pieces and padding share the "no language" slot
 
 _SUBWORD_COLUMNS = ["row_id", "first_language", "second_language", "quality",
-                    "piece_ids", "piece_lang", "word_end"]
+                    "piece_ids", "piece_lang", "word_end", "piece_word", "piece_utt"]
 COLUMNS = {"word": None, "subword": _SUBWORD_COLUMNS}      # None = word defaults
 DEFAULT_PATHS = {"word": "data/tagged.parquet", "subword": "data/subword.parquet"}
 VOCAB_PATHS = {"word": "data/vocab_anticipation.json",
@@ -131,11 +131,17 @@ def encode(words, vocab) -> np.ndarray:
                        dtype=np.int64, count=len(words))
 
 
-def encode_pieces(ids, vocab) -> np.ndarray:
-    """Compact ids for the from-scratch model; ``vocab=None`` keeps raw XLM-R ids."""
+def encode_pieces(ids, vocab, sep_id: int | None = None) -> np.ndarray:
+    """Compact ids for the from-scratch model; ``vocab=None`` keeps raw piece ids.
+
+    Id -1 marks an inserted turn separator: the tokenizer's separator
+    (``sep_id``) in raw mode, ``<bos>`` in the compact vocabulary.
+    """
     if vocab is None:
-        return np.asarray(ids, dtype=np.int64)
-    return np.fromiter((vocab.get(str(int(i)), UNK) for i in ids),
+        out = np.asarray(ids, dtype=np.int64).copy()
+        out[out == -1] = BOS if sep_id is None else sep_id
+        return out
+    return np.fromiter((BOS if int(i) == -1 else vocab.get(str(int(i)), UNK) for i in ids),
                        dtype=np.int64, count=len(ids))
 
 
@@ -154,7 +160,9 @@ class SwitchWindowDataset(IterableDataset):
                  window: int = 256, stride: int = 192, shuffle_buffer: int = 4096,
                  seed: int = 0, languages=None, qualities=None,
                  batch_rows: int = 512, pair_index: dict[str, int] | None = None,
-                 unit: str = "word"):
+                 unit: str = "word", predict_at: str = "piece", lang_input: str = "current",
+                 turn_sep: bool = False, sep_id: int | None = None):
+        assert predict_at in ("piece", "word_end") and lang_input in ("current", "prev_word")
         assert 0 < stride <= window
         self.path, self.vocab, self.split = path, vocab, split
         self.window, self.stride = window, stride
@@ -164,12 +172,19 @@ class SwitchWindowDataset(IterableDataset):
         self.batch_rows = batch_rows
         self.pair_index = pair_index or {}
         self.unit = unit
+        self.predict_at, self.lang_input = predict_at, lang_input
+        self.turn_sep, self.sep_id = turn_sep, sep_id
 
     def _windows(self, ex):
         w, s = self.window, self.stride
-        ids = (encode_pieces(ex["ids"], self.vocab) if self.unit == "subword"
+        ids = (encode_pieces(ex["ids"], self.vocab, self.sep_id) if self.unit == "subword"
                else encode(ex["words"], self.vocab))
-        langs = ex["langs"].astype(np.int64)
+        if self.lang_input == "prev_word":        # the last finished word's language
+            if ex.get("lang_in") is None:
+                raise ValueError("--prev-lang needs piece_word: rebuild the labels")
+            langs = ex["lang_in"].astype(np.int64)
+        else:
+            langs = ex["langs"].astype(np.int64)
         n = len(ids)
         pair = self.pair_index.get(ex["first_language"], 0)
         report = PAIR_KEYS.index(pair_key(ex["first_language"], ex["second_language"]))
@@ -189,11 +204,17 @@ class SwitchWindowDataset(IterableDataset):
             out["word_ids"][:k] = ids[start:stop]
             out["lang_ids"][:] = PAD_LANG
             out["lang_ids"][:k] = langs[start:stop]
+            out["cur_lang"] = np.full(w, PAD_LANG, dtype=np.int64)   # for reporting direction
+            out["cur_lang"][:k] = ex["langs"][start:stop]
             out["y_sw"][:k] = np.maximum(ex["y_sw"][start:stop], 0)
             out["y_dur"][:k] = np.maximum(ex["y_dur"][start:stop], 0)
 
             scored = np.zeros(w, dtype=bool)
             scored[:k] = ex["y_sw"][start:stop] >= 0
+            if self.predict_at == "word_end":     # only the last piece of each word
+                if ex.get("unit_end") is None:
+                    raise ValueError("--predict-at word_end needs piece_word: rebuild the labels")
+                scored[:k] &= ex["unit_end"][start:stop]
             if not first:
                 scored[:warmup] = False          # context-only warm-up
             out["sw_mask"] = scored
@@ -219,7 +240,7 @@ class SwitchWindowDataset(IterableDataset):
         make = example_for(self.unit)
         for row in iter_rows(self.path, self.split, self.batch_rows,
                              self.languages, self.qualities, columns=COLUMNS[self.unit]):
-            ex = make(row)
+            ex = make(row, turn_sep=True) if self.turn_sep else make(row)
             if ex is None:
                 continue
             yield from self._windows(ex)
@@ -244,7 +265,7 @@ class SwitchWindowDataset(IterableDataset):
 
 def collate(batch):
     out = {}
-    for key in ("word_ids", "lang_ids", "y_sw", "y_dur"):
+    for key in ("word_ids", "lang_ids", "cur_lang", "y_sw", "y_dur"):
         out[key] = torch.from_numpy(np.stack([b[key] for b in batch]))
     for key in ("sw_mask", "dur_mask", "shared_mask"):
         out[key] = torch.from_numpy(np.stack([b[key] for b in batch]))
