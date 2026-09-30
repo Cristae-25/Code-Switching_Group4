@@ -88,7 +88,7 @@ def subword_row(utterances, tokens, token_lang, first_language: str,
     # splits at whitespace, so these are the same words for all of them - the
     # positions on which models with different tokenizers can be compared.
     shared = {k for k, (t, s) in enumerate(zip(tokens, slots)) if s != NONE and not CJK.search(t)}
-    ids, pieces, langs, word_end, mixed = [], [], [], [], 0
+    ids, pieces, langs, word_end, piece_word, piece_utt, mixed = [], [], [], [], [], [], 0
     for u, text in enumerate(utterances):
         if not text:
             continue
@@ -98,9 +98,11 @@ def subword_row(utterances, tokens, token_lang, first_language: str,
         lg, m = piece_languages(enc["offset_mapping"], blank, char_slots[u])
         last = {}
         for i, ((s, e), b) in enumerate(zip(enc["offset_mapping"], blank)):
-            if not b:
-                for k in set(char_tok[u][s:e].tolist()) & shared:
-                    last[k] = len(ids) + i
+            covered = set(char_tok[u][s:e].tolist()) - {-1} if not b else set()
+            piece_word.append(max(covered) if covered else -1)    # the word it belongs to
+            piece_utt.append(u)
+            for k in covered & shared:
+                last[k] = len(ids) + i
         ends = set(last.values())
         word_end.extend(len(ids) + i in ends for i in range(len(strs)))
         ids.extend(enc["input_ids"])
@@ -108,7 +110,7 @@ def subword_row(utterances, tokens, token_lang, first_language: str,
         langs.extend(lg)
         mixed += m
     return dict(piece_ids=ids, pieces=pieces, piece_lang=langs, word_end=word_end,
-                mixed_pieces=mixed)
+                piece_word=piece_word, piece_utt=piece_utt, mixed_pieces=mixed)
 
 
 def build_frame(frame: pd.DataFrame, texts: dict, tokenizer, max_fail: float = 0.001):
@@ -147,6 +149,7 @@ def write_parquet(frame: pd.DataFrame, path: str, row_group_size: int = 8192) ->
         ("y_sw", pa.list_(pa.int8())), ("y_len", pa.list_(pa.int32())),
         ("y_dur", pa.list_(pa.int8())), ("censored", pa.list_(pa.bool_())),
         ("dur_known", pa.list_(pa.bool_())), ("word_end", pa.list_(pa.bool_())),
+        ("piece_word", pa.list_(pa.int32())), ("piece_utt", pa.list_(pa.int16())),
         ("mixed_pieces", pa.int32()),
     ])
     table = pa.Table.from_pandas(frame[schema.names], schema=schema, preserve_index=False)

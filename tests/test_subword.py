@@ -276,3 +276,22 @@ def test_word_and_piece_streams_score_the_same_shared_positions(name):
     p_shared = piece["shared"] & (piece["y_sw"] >= 0)
     assert w_shared.sum() == p_shared.sum() == 9            # 10 non-CJK words, last one unlabelled
     assert list(word["y_sw"][w_shared]) == list(piece["y_sw"][p_shared])   # same questions, same answers
+
+
+# --- word and utterance index per piece (for the tuning flags) ---------------
+
+def test_pieces_record_their_word_and_utterance(tok):
+    utts = ["Hola amigo", "你好 friend"]
+    toks = [t for u in utts for t in tokenize_mixed(u)]          # Hola amigo | 你 好 friend
+    labs = ["Spanish", "Spanish", "Chinese", "Chinese", "English"]
+    row = subword_row(utts, toks, labs, "Spanish", "English", tok)
+    pieces = [p for u in utts for p in tok.convert_ids_to_tokens(
+        tok(u, add_special_tokens=False)["input_ids"])]
+    assert len(row["piece_word"]) == len(row["piece_utt"]) == len(pieces)
+    words = [w for w in row["piece_word"] if w >= 0]
+    assert words == sorted(words) and set(words) <= set(range(len(toks)))
+    assert row["piece_word"][-1] == 4                             # last piece belongs to "friend"
+    assert list(row["piece_utt"]) == sorted(row["piece_utt"]) and row["piece_utt"][-1] == 1
+    for p, w in zip(pieces, row["piece_word"]):
+        if p.replace("▁", "") == "":
+            assert w == -1                                        # a bare space marker has no word
