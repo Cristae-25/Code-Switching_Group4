@@ -19,6 +19,7 @@ Every run is scored the same way (`src/evaluation.py`): the switch threshold is 
 | xlmr (subword) | 0.646 | 0.676 |  | 0.536 | 0.759 | 0.678 | 0.575 |
 | xlmr (subword, trained on 10 pairs) | 0.634 | 0.656 |  | 0.502 | 0.764 | 0.674 | 0.574 |
 | xlmr (subword, trained on 10 pairs, held-out pairs) | 0.625 | 0.627 |  | 0.529 | 0.730 | 0.660 | 0.562 |
+| mbert (subword) | 0.634 | 0.662 | 0.719 | 0.512 | 0.759 | 0.713 | 0.576 |
 | scratch (subword, trained on 10 pairs) | 0.447 | 0.435 |  | 0.331 | 0.565 | 0.632 | 0.481 |
 | scratch (subword, trained on 10 pairs, held-out pairs) | 0.330 | 0.322 |  | 0.205 | 0.500 | 0.568 | 0.398 |
 
@@ -26,44 +27,44 @@ Every run is scored the same way (`src/evaluation.py`): the switch threshold is 
 
 Pairs are sorted from easiest to hardest (mean F1 across the models shown). **Bold** marks the best model for each pair.
 
-| Pair | hazard, pooled (words) | hazard, per pair (words) | hazard, pooled (pieces) | hazard, per pair (pieces) | hazard, per pair (RoBERTa pieces) | hazard, per pair (mBERT pieces) | scratch (word) | scratch (subword) | xlmr (subword) | xlmr (subword, trained on 10 pairs) | xlmr (subword, trained on 10 pairs, held-out pairs) | scratch (subword, trained on 10 pairs) | scratch (subword, trained on 10 pairs, held-out pairs) |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| Hindi->English | 0.381 | 0.442 | 0.329 | 0.362 | 0.355 | 0.307 | 0.616 | 0.544 | **0.715** |  | 0.595 |  | 0.372 |
-| Philippines->English | 0.313 | 0.394 | 0.264 | 0.323 | 0.290 | 0.287 | 0.548 | 0.494 | 0.638 | **0.639** |  | 0.498 |  |
-| Korean->English | 0.247 | 0.252 | 0.207 | 0.265 | 0.232 | 0.208 | 0.636 | 0.626 | **0.808** |  | 0.775 |  | 0.318 |
-| Japanese->English | 0.232 | 0.244 | 0.190 | 0.243 | 0.218 | 0.182 | 0.537 | 0.522 | 0.736 | **0.737** |  | 0.516 |  |
-| Cantonese->English | 0.327 | 0.328 | 0.249 | 0.252 | 0.277 | 0.265 | 0.498 | 0.439 | 0.619 | **0.623** |  | 0.449 |  |
-| German->English | 0.248 | 0.318 | 0.210 | 0.268 | 0.236 | 0.248 | 0.516 | 0.464 | **0.733** |  | 0.653 |  | 0.359 |
-| French->English | 0.233 | 0.302 | 0.195 | 0.208 | 0.225 | 0.195 | 0.518 | 0.458 | **0.695** | 0.694 |  | 0.430 |  |
-| Spanish->English | 0.232 | 0.278 | 0.191 | 0.239 | 0.212 | 0.223 | 0.489 | 0.425 | **0.673** | 0.669 |  | 0.422 |  |
-| Arabic->English | 0.239 | 0.322 | 0.197 | 0.241 | 0.224 | 0.176 | 0.482 | 0.400 | 0.664 | **0.666** |  | 0.406 |  |
-| Vietnamese->English | 0.267 | 0.270 | 0.222 | 0.248 | 0.232 | 0.221 | 0.453 | 0.403 | 0.622 | **0.623** |  | 0.410 |  |
-| Russian->English | 0.236 | 0.311 | 0.199 | 0.243 | 0.220 | 0.188 | 0.470 | 0.372 | 0.659 | **0.667** |  | 0.395 |  |
-| Malay->English | 0.277 | 0.328 | 0.241 | 0.281 | 0.232 | 0.254 | 0.459 | 0.397 | **0.548** | 0.545 |  | 0.396 |  |
-| Italian->English | 0.227 | 0.285 | 0.192 | 0.242 | 0.214 | 0.193 | 0.467 | 0.414 | **0.671** |  | 0.661 |  | 0.366 |
-| Chinese->English | 0.221 | 0.225 | 0.179 | 0.242 | 0.199 | 0.142 | 0.448 | 0.435 | **0.699** | 0.697 |  | 0.423 |  |
-| German->French | 0.198 | 0.280 | 0.150 | 0.223 | 0.000 | 0.202 | 0.433 | 0.368 | **0.658** |  | 0.450 |  | 0.194 |
+| Pair | hazard, pooled (words) | hazard, per pair (words) | hazard, pooled (pieces) | hazard, per pair (pieces) | hazard, per pair (RoBERTa pieces) | hazard, per pair (mBERT pieces) | scratch (word) | scratch (subword) | xlmr (subword) | xlmr (subword, trained on 10 pairs) | xlmr (subword, trained on 10 pairs, held-out pairs) | mbert (subword) | scratch (subword, trained on 10 pairs) | scratch (subword, trained on 10 pairs, held-out pairs) |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| Hindi->English | 0.381 | 0.442 | 0.329 | 0.362 | 0.355 | 0.307 | 0.616 | 0.544 | **0.715** |  | 0.595 | 0.706 |  | 0.372 |
+| Korean->English | 0.247 | 0.252 | 0.207 | 0.265 | 0.232 | 0.208 | 0.636 | 0.626 | **0.808** |  | 0.775 | 0.793 |  | 0.318 |
+| Philippines->English | 0.313 | 0.394 | 0.264 | 0.323 | 0.290 | 0.287 | 0.548 | 0.494 | 0.638 | **0.639** |  | 0.627 | 0.498 |  |
+| Japanese->English | 0.232 | 0.244 | 0.190 | 0.243 | 0.218 | 0.182 | 0.537 | 0.522 | 0.736 | **0.737** |  | 0.700 | 0.516 |  |
+| German->English | 0.248 | 0.318 | 0.210 | 0.268 | 0.236 | 0.248 | 0.516 | 0.464 | **0.733** |  | 0.653 | 0.718 |  | 0.359 |
+| Cantonese->English | 0.327 | 0.328 | 0.249 | 0.252 | 0.277 | 0.265 | 0.498 | 0.439 | 0.619 | **0.623** |  | 0.609 | 0.449 |  |
+| French->English | 0.233 | 0.302 | 0.195 | 0.208 | 0.225 | 0.195 | 0.518 | 0.458 | **0.695** | 0.694 |  | 0.689 | 0.430 |  |
+| Spanish->English | 0.232 | 0.278 | 0.191 | 0.239 | 0.212 | 0.223 | 0.489 | 0.425 | **0.673** | 0.669 |  | 0.660 | 0.422 |  |
+| Arabic->English | 0.239 | 0.322 | 0.197 | 0.241 | 0.224 | 0.176 | 0.482 | 0.400 | 0.664 | **0.666** |  | 0.649 | 0.406 |  |
+| Russian->English | 0.236 | 0.311 | 0.199 | 0.243 | 0.220 | 0.188 | 0.470 | 0.372 | 0.659 | **0.667** |  | 0.645 | 0.395 |  |
+| Italian->English | 0.227 | 0.285 | 0.192 | 0.242 | 0.214 | 0.193 | 0.467 | 0.414 | **0.671** |  | 0.661 | 0.658 |  | 0.366 |
+| Chinese->English | 0.221 | 0.225 | 0.179 | 0.242 | 0.199 | 0.142 | 0.448 | 0.435 | **0.699** | 0.697 |  | 0.676 | 0.423 |  |
+| Vietnamese->English | 0.267 | 0.270 | 0.222 | 0.248 | 0.232 | 0.221 | 0.453 | 0.403 | 0.622 | **0.623** |  | 0.608 | 0.410 |  |
+| Malay->English | 0.277 | 0.328 | 0.241 | 0.281 | 0.232 | 0.254 | 0.459 | 0.397 | **0.548** | 0.545 |  | 0.531 | 0.396 |  |
+| German->French | 0.198 | 0.280 | 0.150 | 0.223 | 0.000 | 0.202 | 0.433 | 0.368 | 0.658 |  | 0.450 | **0.663** |  | 0.194 |
 
 ## Shared positions by language pair
 
 Switch F1 on the last piece of each non-CJK word (the same words for every model).
 
-| Pair | hazard, pooled (words) | hazard, per pair (words) | hazard, pooled (pieces) | hazard, per pair (pieces) | hazard, per pair (RoBERTa pieces) | hazard, per pair (mBERT pieces) | scratch (word) | scratch (subword) |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Cantonese->English | 0.434 | 0.427 | 0.414 | 0.400 | 0.384 | 0.406 | **0.675** | 0.622 |
-| Hindi->English | 0.381 | 0.442 | 0.373 | 0.434 | 0.401 | 0.433 | **0.616** | 0.586 |
-| Philippines->English | 0.313 | 0.394 | 0.310 | 0.391 | 0.342 | 0.393 | **0.548** | 0.528 |
-| Korean->English | 0.311 | 0.329 | 0.305 | 0.318 | 0.322 | 0.313 | **0.663** | 0.584 |
-| Japanese->English | 0.281 | 0.306 | 0.277 | 0.273 | 0.296 | 0.267 | **0.616** | 0.560 |
-| German->English | 0.248 | 0.318 | 0.241 | 0.322 | 0.248 | 0.319 | **0.516** | 0.500 |
-| Chinese->English | 0.269 | 0.284 | 0.260 | 0.189 | 0.270 | 0.235 | **0.608** | 0.577 |
-| Malay->English | 0.277 | 0.328 | 0.275 | 0.321 | 0.265 | 0.314 | **0.459** | 0.419 |
-| French->English | 0.233 | 0.302 | 0.223 | 0.238 | 0.235 | 0.224 | **0.518** | 0.494 |
-| Spanish->English | 0.232 | 0.278 | 0.222 | 0.281 | 0.225 | 0.270 | **0.489** | 0.457 |
-| Arabic->English | 0.239 | 0.322 | 0.229 | 0.311 | 0.235 | 0.197 | **0.482** | 0.431 |
-| Vietnamese->English | 0.267 | 0.271 | 0.258 | 0.270 | 0.254 | 0.257 | **0.453** | 0.413 |
-| Russian->English | 0.236 | 0.311 | 0.228 | 0.307 | 0.231 | 0.214 | **0.470** | 0.408 |
-| Italian->English | 0.227 | 0.285 | 0.220 | 0.292 | 0.223 | 0.221 | **0.467** | 0.446 |
-| German->French | 0.198 | 0.280 | 0.190 | 0.272 | 0.000 | 0.267 | **0.433** | 0.403 |
+| Pair | hazard, pooled (words) | hazard, per pair (words) | hazard, pooled (pieces) | hazard, per pair (pieces) | hazard, per pair (RoBERTa pieces) | hazard, per pair (mBERT pieces) | scratch (word) | scratch (subword) | mbert (subword) |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| Cantonese->English | 0.434 | 0.427 | 0.414 | 0.400 | 0.384 | 0.406 | 0.675 | 0.622 | **0.791** |
+| Hindi->English | 0.381 | 0.442 | 0.373 | 0.434 | 0.401 | 0.433 | 0.616 | 0.586 | **0.718** |
+| Korean->English | 0.311 | 0.329 | 0.305 | 0.318 | 0.322 | 0.313 | 0.663 | 0.584 | **0.803** |
+| Philippines->English | 0.313 | 0.394 | 0.310 | 0.391 | 0.342 | 0.393 | 0.548 | 0.528 | **0.637** |
+| Japanese->English | 0.281 | 0.306 | 0.277 | 0.273 | 0.296 | 0.267 | 0.616 | 0.560 | **0.770** |
+| Chinese->English | 0.269 | 0.284 | 0.260 | 0.189 | 0.270 | 0.235 | 0.608 | 0.577 | **0.773** |
+| German->English | 0.248 | 0.318 | 0.241 | 0.322 | 0.248 | 0.319 | 0.516 | 0.500 | **0.728** |
+| Malay->English | 0.277 | 0.328 | 0.275 | 0.321 | 0.265 | 0.314 | 0.459 | 0.419 | **0.537** |
+| French->English | 0.233 | 0.302 | 0.223 | 0.238 | 0.235 | 0.224 | 0.518 | 0.494 | **0.696** |
+| Spanish->English | 0.232 | 0.278 | 0.222 | 0.281 | 0.225 | 0.270 | 0.489 | 0.457 | **0.666** |
+| Arabic->English | 0.239 | 0.322 | 0.229 | 0.311 | 0.235 | 0.197 | 0.482 | 0.431 | **0.663** |
+| Russian->English | 0.236 | 0.311 | 0.228 | 0.307 | 0.231 | 0.214 | 0.470 | 0.408 | **0.653** |
+| Vietnamese->English | 0.267 | 0.271 | 0.258 | 0.270 | 0.254 | 0.257 | 0.453 | 0.413 | **0.613** |
+| Italian->English | 0.227 | 0.285 | 0.220 | 0.292 | 0.223 | 0.221 | 0.467 | 0.446 | **0.664** |
+| German->French | 0.198 | 0.280 | 0.190 | 0.272 | 0.000 | 0.267 | 0.433 | 0.403 | **0.673** |
 
-Spread between the easiest and hardest pair: hazard, pooled (words) 0.183, hazard, per pair (words) 0.217, hazard, pooled (pieces) 0.179, hazard, per pair (pieces) 0.154, hazard, per pair (RoBERTa pieces) 0.355, hazard, per pair (mBERT pieces) 0.166, scratch (word) 0.204, scratch (subword) 0.258, xlmr (subword) 0.260, xlmr (subword, trained on 10 pairs) 0.192, xlmr (subword, trained on 10 pairs, held-out pairs) 0.325, scratch (subword, trained on 10 pairs) 0.121, scratch (subword, trained on 10 pairs, held-out pairs) 0.178.
+Spread between the easiest and hardest pair: hazard, pooled (words) 0.183, hazard, per pair (words) 0.217, hazard, pooled (pieces) 0.179, hazard, per pair (pieces) 0.154, hazard, per pair (RoBERTa pieces) 0.355, hazard, per pair (mBERT pieces) 0.166, scratch (word) 0.204, scratch (subword) 0.258, xlmr (subword) 0.260, xlmr (subword, trained on 10 pairs) 0.192, xlmr (subword, trained on 10 pairs, held-out pairs) 0.325, mbert (subword) 0.263, scratch (subword, trained on 10 pairs) 0.121, scratch (subword, trained on 10 pairs, held-out pairs) 0.178.

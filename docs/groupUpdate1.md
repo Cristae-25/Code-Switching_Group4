@@ -62,6 +62,7 @@ validation.
 | best training-free (per-pair hazard), pieces | 0.266 | 0.259 |
 | from-scratch causal transformer, pieces | 0.453 | 0.453 |
 | **XLM-R + causal mask (278 M params, ~1 epoch), pieces** | **0.646** | **0.676** |
+| mBERT + causal mask (177 M params, ~1 epoch), its own pieces | 0.634 | 0.662 |
 
 **Update (2026-09-29): pretrained XLM-R with a causal mask** reaches switch F1 **0.646** and macro-F1 **0.676** on XLM-R pieces. That is better than the from-scratch model on **all 15 pairs** (+0.15 to +0.27), with four pairs above 0.7: Korean 0.808, Japanese 0.736, German→English 0.733, Hindi 0.715. On the hard direction, switching *into* L2, F1 rises from 0.356 to 0.536. Duration accuracy is 0.678 (macro-F1 0.575). Two independent runs agree within ±0.004 per pair. The details are in §4.8 and `docs/results/2026-09-29_xlmr_causal.md`. Word and piece rows are different units, so compare within a unit.
 
@@ -790,6 +791,26 @@ The prediction in §1.4 that Italian would be the easiest and Korean the hardest
 **German→French, the diagnostic pair, transfers** (0.450, against 0.243 zero-shot for the from-scratch word model). "Anticipate a switch" and "anticipate English" are now separable, and the second is only part of what XLM-R learned. The remaining −0.21 gap is still the argument for a second non-English second language (§5.3 item 2).
 
 **Like for like.** A from-scratch model on the same pieces, same 10 training languages and same report, scores held-out F1 **0.330**: 26% below its trained-on 0.447, and German→French 0.194 (always-switching 0.167). XLM-R's zero-shot advantage (+0.30) is larger than its in-distribution advantage (+0.19). Pretraining matters most exactly where universality is tested.
+
+#### mBERT, the proposal's second backbone (2026-09-30)
+
+`bert-base-multilingual-cased` with a causal mask, trained with exactly the XLM-R settings, on all pairs and zero-shot. Record: `docs/results/2026-09-30_mbert_causal.md`.
+
+| | **XLM-R** | mBERT |
+|---|---:|---:|
+| All pairs: switch F1 / macro-F1 (own pieces) | **0.646 / 0.676** | 0.634 / 0.662 |
+| Pairs where it is ahead | **14 of 15** | 1 (German→French) |
+| Zero-shot, held-out: F1 / macro-F1 | **0.625 / 0.627** | 0.565 / 0.573 |
+| Zero-shot relative drop | **12.6%** | 19.1% |
+| Zero-shot Korean / German→French | **0.775 / 0.450** | 0.663 / 0.417 |
+| Duration macro-F1 | 0.575 | 0.576 |
+
+- **Trained on every pair, the two are close.** XLM-R is ahead by 0.006–0.036 per pair; against each tokenizer's own baseline, mBERT gains more on 14 of 15 pairs.
+- **Zero-shot, XLM-R is clearly better on every held-out pair.** It is therefore the backbone for the universality claim.
+- **Both transfer to German→French,** so reaching an unseen non-English second language comes with multilingual pretraining in general.
+- **On identical words (the shared positions), mBERT scores 0.719,** against 0.546 and 0.588 for the from-scratch models, and beats them on all 15 pairs.
+- **Caveat.** The two tokenizers score different sets of positions: XLM-R merges CJK characters into pieces, mBERT splits them. An exact same-positions XLM-R vs mBERT comparison needs one more XLM-R run with the current notebook, which reports shared positions.
+- **Not run: English-only RoBERTa.** The team judged the monolingual control unnecessary.
 
 ## 5. Next Steps — challenges with sub-word tokenization and Language-ID→segment mapping
 

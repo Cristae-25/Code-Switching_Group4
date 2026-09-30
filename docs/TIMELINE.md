@@ -84,3 +84,15 @@ Status key: ✅ done · 🟡 partial / done differently · ⬜ not started
   2. ~~The XLM-R zero-shot run.~~ Done: held-out F1 0.625, 12.6% below trained-on. German→French transfers (0.450 against always-switch 0.167).
   3. The from-scratch zero-shot rerun with the new report, as its comparison.
   4. Seeds for the variance analysis (Week 12).
+
+## Update — 2026-09-30 (mBERT)
+
+- **mBERT + causal mask**, with the same settings as XLM-R:
+  - All pairs: F1 0.634, against 0.646 for XLM-R.
+  - Zero-shot: **0.565** against **0.625** for XLM-R.
+  - XLM-R is ahead on 14 of 15 pairs and on every held-out pair, so XLM-R is the universal backbone.
+  - Both backbones named in the proposal are now done. English RoBERTa was dropped by team decision.
+- **Still to run:**
+  1. XLM-R once more with the current notebook, for exact same-positions scores against mBERT.
+  2. Seeded runs for the variance analysis (Week 12).
+  3. A class-weighted duration loss (Medium is the weakest class for every model).
