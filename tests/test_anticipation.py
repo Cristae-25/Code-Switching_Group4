@@ -338,7 +338,8 @@ def _train_script():
 def _args(**kw):
     import argparse
     base = dict(unit="word", path=None, window=None, stride=None, vocab_size=None,
-                out=None, ckpt=None, names="script_words", no_lang=False, model="scratch", lr=None)
+                out=None, ckpt=None, names="script_words", no_lang=False, model="scratch", lr=None,
+                turn_sep=False, prev_lang=False, predict_at="piece")
     return argparse.Namespace(**{**base, **kw})
 
 
@@ -534,3 +535,11 @@ def test_direction_uses_the_current_language_even_with_prev_word_input():
     assert list(w["cur_lang"][:3]) == [0, 1, 1] and list(w["lang_ids"][:3]) == [2, 0, 1]
     from src.streaming import collate
     assert collate([w])["cur_lang"].shape == (1, 8)
+
+
+def test_sub_word_only_flags_are_refused_for_word_units():
+    mod = _train_script()
+    for flag in (dict(turn_sep=True), dict(prev_lang=True), dict(predict_at="word_end")):
+        with pytest.raises(SystemExit):
+            mod.resolve_defaults(_args(**flag))
+        mod.resolve_defaults(_args(unit="subword", **flag))          # fine on pieces

@@ -35,6 +35,8 @@ from src.metrics import prf  # noqa: E402
 from src.models import build_model  # noqa: E402
 from src.streaming import (DEFAULT_PATHS, VOCAB_PATHS, build_subword_vocab,  # noqa: E402
                            build_vocab, make_loader)
+from src.training import (count_duration_classes, duration_class_weights,  # noqa: E402
+                          save_predictions, set_seed)
 
 UNIT_DEFAULTS = {"word": dict(window=256, stride=192, vocab_size=50_000,
                               out="data/anticipation_word.json",
@@ -72,6 +74,12 @@ def resolve_defaults(args):
         # data/subword.parquet was built with the default names policy baked in.
         raise SystemExit("--names only applies to --unit word: the sub-word labels were "
                          "built with script_words (use kaggle/load_labels.ipynb for others)")
+    subword_only = [f for f, on in (("--turn-sep", getattr(args, "turn_sep", False)),
+                                    ("--prev-lang", getattr(args, "prev_lang", False)),
+                                    ("--predict-at word_end",
+                                     getattr(args, "predict_at", "piece") == "word_end")) if on]
+    if subword_only and args.unit != "subword":
+        raise SystemExit(f"{', '.join(subword_only)} need the sub-word labels: use --unit subword")
     if args.window > 512 and model in PRETRAINED:
         raise SystemExit("pretrained encoders read at most 512 positions: use --window 512 or less")
     return args
@@ -96,7 +104,7 @@ def autocast(dev):
 def evaluate(model, loader, dev, max_batches=0):
     """Logits and labels at every scored position, with pair and direction."""
     model.eval()
-    out = {k: [] for k in ("logit", "y", "pair", "lang", "dtrue", "dpred", "shared")}
+    out = {k: [] for k in ("logit", "y", "pair", "lang", "dtrue", "dpred", "dprob", "shared")}
     for i, b in enumerate(loader):
         if max_batches and i >= max_batches:
             break
@@ -111,6 +119,7 @@ def evaluate(model, loader, dev, max_batches=0):
         if dm.any():
             out["dtrue"].append(b["y_dur"][dm].numpy())
             out["dpred"].append(dur.float().cpu()[dm].argmax(-1).numpy())
+            out["dprob"].append(torch.softmax(dur.float().cpu()[dm], -1).numpy())
         out["shared"].append(b["shared_mask"][m].numpy())
     return {k: np.concatenate(v) if v else np.empty(0) for k, v in out.items()}
 
@@ -172,6 +181,16 @@ def main() -> None:
                     help="no language input (implied by --unit subword)")
     ap.add_argument("--out", default=None, help="default depends on --model and --unit")
     ap.add_argument("--ckpt", default=None, help="default depends on --model and --unit")
+    ap.add_argument("--seed", type=int, default=None, help="seed initialisation and data order")
+    ap.add_argument("--save-preds", default=None,
+                    help="save val/test predictions (.npz) for offline threshold tuning")
+    ap.add_argument("--dur-class-weights", choices=["none", "balanced"], default="none",
+                    help="balanced: inverse-frequency weights from the train split")
+    ap.add_argument("--turn-sep", action="store_true", help="separator piece between turns (pieces)")
+    ap.add_argument("--prev-lang", action="store_true",
+                    help="input: the language of the last finished word (pieces)")
+    ap.add_argument("--predict-at", choices=["piece", "word_end"], default="piece",
+                    help="word_end: train and score only at the last piece of each word")
     ap.add_argument("--names", choices=["script_words", "transparent", "script", "hybrid", "language"],
                     default="script_words",
                     help="how named entities count (see src/segments.py); word units only")
@@ -179,7 +198,9 @@ def main() -> None:
     import src.anticipation as _ant
     _ant.NAMES = args.names
     resolve_defaults(args)
-    use_lang = not (args.no_lang or args.unit == "subword")
+    if args.seed is not None:
+        set_seed(args.seed)
+    use_lang = args.prev_lang or not (args.no_lang or args.unit == "subword")
 
     if args.model in PRETRAINED:
         vocab, vocab_size = None, None                # raw piece ids; size from the backbone
@@ -221,7 +242,17 @@ def main() -> None:
         raise SystemExit("aborting: model is not causal")
     model.to(dev)
 
-    common = dict(window=args.window, stride=args.stride, pair_index=PAIR_INDEX, unit=args.unit)
+    sep_id = None
+    if args.turn_sep and args.model in PRETRAINED:     # the backbone's own separator token
+        from transformers import AutoTokenizer
+        from src.xlmr_model import BACKBONES
+        sep_id = AutoTokenizer.from_pretrained(args.backbone or BACKBONES[args.model]).sep_token_id
+    common = dict(window=args.window, stride=args.stride, pair_index=PAIR_INDEX, unit=args.unit,
+                  predict_at=args.predict_at, turn_sep=args.turn_sep, sep_id=sep_id,
+                  lang_input="prev_word" if args.prev_lang else "current",
+                  seed=args.seed if args.seed is not None else 0)
+    print(f"flags: seed={args.seed} predict_at={args.predict_at} turn_sep={args.turn_sep} "
+          f"prev_lang={args.prev_lang} dur_class_weights={args.dur_class_weights}")
     loader = lambda split, langs, workers=0: make_loader(  # noqa: E731
         args.path, vocab, split, args.batch_size, workers, languages=langs, **common)
     train_loader = loader("train", train_langs or None, args.workers)
@@ -238,7 +269,13 @@ def main() -> None:
     sched = make_scheduler(opt, lrs, args.steps)
     scaler = torch.amp.GradScaler("cuda", enabled=dev.type == "cuda")
     bce = nn.BCEWithLogitsLoss(reduction="none")
-    ce = nn.CrossEntropyLoss(reduction="none")
+    dur_w = None
+    if args.dur_class_weights == "balanced":
+        counts = count_duration_classes(args.path, args.unit, train_langs or None, args.predict_at)
+        dur_w = duration_class_weights(counts)
+        print("duration class counts (train):", counts.tolist(), "-> weights", np.round(dur_w, 3).tolist())
+        dur_w = torch.tensor(dur_w, dtype=torch.float32, device=dev)
+    ce = nn.CrossEntropyLoss(weight=dur_w, reduction="none")
 
     step, t0, running = 0, time.time(), []
     model.train()
@@ -274,7 +311,12 @@ def main() -> None:
     tau, vf1 = tune_threshold(1 / (1 + np.exp(-val["logit"])), val["y"])
     print(f"threshold tuned on val: tau={tau:.3f} (val F1 {vf1:.3f})")
 
-    report = score(evaluate(model, test_loader, dev, args.eval_batches), tau)
+    test = evaluate(model, test_loader, dev, args.eval_batches)
+    if args.save_preds:
+        os.makedirs(os.path.dirname(args.save_preds) or ".", exist_ok=True)
+        save_predictions(args.save_preds, val=val, test=test)
+        print(f"saved predictions -> {args.save_preds}")
+    report = score(test, tau)
     print("\n" + format_report(report, f"TEST split - {args.model} ({args.unit})"))
     if "shared" in report:
         print("\n" + format_report(report["shared"], "SHARED positions (last piece of each "

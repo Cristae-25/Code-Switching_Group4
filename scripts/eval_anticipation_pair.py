@@ -59,8 +59,16 @@ def main() -> None:
     model.eval().to(args.device)
     tau = ck["tau"]
 
+    sep_id = None
+    if a.get("turn_sep") and pretrained:
+        from transformers import AutoTokenizer
+        from src.xlmr_model import BACKBONES
+        sep_id = AutoTokenizer.from_pretrained(a.get("backbone") or BACKBONES[a["model"]]).sep_token_id
     ds = SwitchWindowDataset(path, vocab, split=args.split,
-                             window=a["window"], stride=a["stride"], unit=unit)
+                             window=a["window"], stride=a["stride"], unit=unit,
+                             predict_at=a.get("predict_at", "piece"), turn_sep=a.get("turn_sep", False),
+                             sep_id=sep_id,
+                             lang_input="prev_word" if a.get("prev_lang") else "current")
     make = example_for(unit)
     logits, truth = [], []
     batch = []
@@ -68,7 +76,7 @@ def main() -> None:
         for row in iter_rows(path, split=args.split, columns=COLUMNS[unit]):
             if row["first_language"] != args.l1 or row["second_language"] != args.l2:
                 continue
-            ex = make(row)
+            ex = make(row, turn_sep=True) if a.get("turn_sep") else make(row)
             if ex is None:
                 continue
             batch.extend(ds._windows(ex))
