@@ -96,3 +96,14 @@ Status key: ✅ done · 🟡 partial / done differently · ⬜ not started
   1. XLM-R once more with the current notebook, for exact same-positions scores against mBERT.
   2. Seeded runs for the variance analysis (Week 12).
   3. A class-weighted duration loss (Medium is the weakest class for every model).
+
+## Update — 2026-09-30 (tuning ablations)
+
+- **Tuning flags built:** seed, saved predictions, class-weighted duration loss, turn separators, previous-word language, word-end prediction. All are off by default.
+- **Local ablations** on the from-scratch model, same seed, one flag at a time. Adopted:
+  - class-weighted duration: duration macro-F1 +0.059;
+  - previous-word language: +0.009 shared switch F1;
+  - word-end prediction: +0.010.
+- **Dropped:** turn separators (no effect) and per-pair thresholds (no gain).
+- **Combined:** shared F1 +0.023, duration macro-F1 +0.073. `docs/results/2026-09-30_ablations.md`.
+- **Next (Week 9 tuning, on Kaggle):** XLM-R with the adopted flags, then a longer (3-epoch) run.
