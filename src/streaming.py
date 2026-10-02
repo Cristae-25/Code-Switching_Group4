@@ -229,6 +229,7 @@ class SwitchWindowDataset(IterableDataset):
             out["pair_id"] = np.int64(pair)
             out["report_pair"] = np.int64(report)
             out["row_id"] = np.int64(ex["row_id"])
+            out["start"] = np.int64(start)        # window offset in the row: position = start + i
             yield out
 
             if stop == n:
@@ -269,7 +270,7 @@ def collate(batch):
         out[key] = torch.from_numpy(np.stack([b[key] for b in batch]))
     for key in ("sw_mask", "dur_mask", "shared_mask"):
         out[key] = torch.from_numpy(np.stack([b[key] for b in batch]))
-    for key in ("pair_id", "report_pair", "row_id"):
+    for key in ("pair_id", "report_pair", "row_id", "start"):
         out[key] = torch.tensor([int(b[key]) for b in batch])
     return out
 

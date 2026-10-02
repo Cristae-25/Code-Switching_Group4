@@ -543,3 +543,17 @@ def test_sub_word_only_flags_are_refused_for_word_units():
         with pytest.raises(SystemExit):
             mod.resolve_defaults(_args(**flag))
         mod.resolve_defaults(_args(unit="subword", **flag))          # fine on pieces
+
+
+# --- saved predictions trace back to their conversation and position ----------
+
+def test_scored_positions_map_back_to_row_and_position():
+    from src.streaming import collate
+    mod = _train_script()
+    n = 40
+    ex = subword_example(_sw_row(list(range(5, 5 + n)), [i % 3 == 0 for i in range(n)], row_id=77))
+    ds = SwitchWindowDataset("unused", None, window=16, stride=12, unit="subword")
+    b = collate(list(ds._windows(ex)))
+    row, pos = mod.scored_positions(b)
+    assert set(row.tolist()) == {77}
+    assert pos.tolist() == list(np.flatnonzero(ex["y_sw"] >= 0))     # each scored once, in order

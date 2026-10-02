@@ -100,11 +100,20 @@ def autocast(dev):
     return contextlib.nullcontext()
 
 
+def scored_positions(b):
+    """``(row_id, position in the row)`` of every scored position in a batch, in order."""
+    m = b["sw_mask"]
+    row = b["row_id"].unsqueeze(1).expand_as(m)[m]
+    pos = (b["start"].unsqueeze(1) + torch.arange(m.shape[1])).expand_as(m)[m]
+    return row.numpy(), pos.numpy()
+
+
 @torch.no_grad()
 def evaluate(model, loader, dev, max_batches=0):
     """Logits and labels at every scored position, with pair and direction."""
     model.eval()
-    out = {k: [] for k in ("logit", "y", "pair", "lang", "dtrue", "dpred", "dprob", "shared")}
+    out = {k: [] for k in ("logit", "y", "pair", "lang", "dtrue", "dpred", "dprob", "shared",
+                           "row", "pos")}
     for i, b in enumerate(loader):
         if max_batches and i >= max_batches:
             break
@@ -121,6 +130,9 @@ def evaluate(model, loader, dev, max_batches=0):
             out["dpred"].append(dur.float().cpu()[dm].argmax(-1).numpy())
             out["dprob"].append(torch.softmax(dur.float().cpu()[dm], -1).numpy())
         out["shared"].append(b["shared_mask"][m].numpy())
+        row, pos = scored_positions(b)                      # trace errors back to the text
+        out["row"].append(row)
+        out["pos"].append(pos)
     return {k: np.concatenate(v) if v else np.empty(0) for k, v in out.items()}
 
 
