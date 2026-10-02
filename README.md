@@ -112,7 +112,7 @@ piece          lang  y_sw  y_len  y_dur
 ## Common commands
 
 ```bash
-./.venv/bin/python -m pytest tests/ -q                   # 266 tests
+./.venv/bin/python -m pytest tests/ -q                   # 309 tests
 ./.venv/bin/python scripts/shuffle_parquet.py            # -> data/tagged_shuffled.parquet (train on this)
 ./.venv/bin/python scripts/baseline_anticipation.py      # training-free baselines, ~4 min
 ./.venv/bin/python scripts/train_anticipation.py --build-vocab --path data/tagged_shuffled.parquet --steps 6000   # ~23 min on an M3
@@ -176,6 +176,8 @@ data/         local only: small result JSONs are tracked, everything else is git
 ```
 
 ## Read next
+
+**Working on the project?** Start with [`docs/TEAM_PLAN.md`](docs/TEAM_PLAN.md) (who owns which language pairs, and the milestones) and [`CONTRIBUTING.md`](CONTRIBUTING.md) (setup, git workflow, how to report a result). Each pair has a page in [`docs/pairs/`](docs/pairs/), and Kaggle runs are logged in [`docs/RUN_LOG.md`](docs/RUN_LOG.md).
 
 1. [`docs/labelling_models.md`](docs/labelling_models.md): which model labelled which pair, its accuracy on human-annotated data, and how names are handled.
 2. [`docs/groupUpdate1.md`](docs/groupUpdate1.md): the anticipation task. It covers objectives, the held-out design, causal constraints, baselines, results, and next steps.

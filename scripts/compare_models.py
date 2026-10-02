@@ -51,8 +51,8 @@ def _summary(label: str, rep: dict) -> dict:
                 per_pair={k: v["f1"] for k, v in rep["per_pair"].items()})
 
 
-def load_runs(specs) -> list[dict]:
-    runs = []
+def iter_reports(specs):
+    """``(label, report)`` for every run the specs name, in order (shared with pair_report.py)."""
     for spec in specs:
         path, *rest = spec.split(":", 2)
         if not os.path.exists(path):
@@ -60,9 +60,8 @@ def load_runs(specs) -> list[dict]:
         data = json.load(open(path))
         if rest:                                          # one entry of a baseline file
             key = rest[0]
-            if key not in data:
-                continue
-            runs.append(_summary(rest[1] if len(rest) > 1 else f"{key} (baseline)", data[key]))
+            if key in data:
+                yield (rest[1] if len(rest) > 1 else f"{key} (baseline)"), data[key]
             continue
         if "per_direction" not in data:                  # written before the shared report
             print(f"skipping {path}: old result format (re-run it to include it)")
@@ -71,9 +70,13 @@ def load_runs(specs) -> list[dict]:
         trained_on = [x for x in (data.get("args") or {}).get("train_langs", "").split(",") if x]
         if trained_on:                                   # a zero-shot run: say what it saw
             label = label[:-1] + f", trained on {len(trained_on)} pairs)"
-        runs.append(_summary(label, data))
+        yield label, data
         if "zero_shot" in data:
-            runs.append(_summary(label[:-1] + ", held-out pairs)", data["zero_shot"]))
+            yield label[:-1] + ", held-out pairs)", data["zero_shot"]
+
+
+def load_runs(specs) -> list[dict]:
+    runs = [_summary(label, rep) for label, rep in iter_reports(specs)]
     labels = [r["label"] for r in runs]
     dup = {x for x in labels if labels.count(x) > 1}
     if dup:
