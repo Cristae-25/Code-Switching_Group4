@@ -67,7 +67,7 @@ The report (`src/evaluation.py`) covers switch P/R/F1 overall, per language pair
 """
 
 CONFIG = """
-MODEL = "roberta"       # "xlmr" | "roberta" | "mbert"
+MODEL = "xlmr"          # "xlmr" | "roberta" | "mbert"
 SMOKE = False           # True: 60 steps + a small evaluation, to check everything runs
 RUN_FULL = True         # train and score on all 15 pairs
 ZERO_SHOT = False       # train on 10 pairs and score the 4 held-out languages

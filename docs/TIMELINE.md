@@ -25,8 +25,8 @@ Status key: ✅ done · 🟡 partial / done differently · ⬜ not started
 **Ahead of schedule.** Week 3 is complete. Most of Weeks 4–9 already exists for a from-scratch model, and the numbers are in `groupUpdate1.md` §4.
 
 **Gaps against the named milestones.** These are the items that could become late:
-1. **Sub-word tokenization** (Week 4): the tokenization is word-level today (`groupUpdate1.md` §5.3 item 4).
-2. **XLM-R / mBERT as the anticipation backbone** (Week 5): not built yet (§5.3 item 6). Weeks 10–13 depend on it.
+1. ~~**Sub-word tokenization** (Week 4): the tokenization is word-level today (`groupUpdate1.md` §5.3 item 4).~~ Done 2026-09-27 (`data/subword.parquet`).
+2. ~~**XLM-R / mBERT as the anticipation backbone** (Week 5): not built yet (§5.3 item 6). Weeks 10–13 depend on it.~~ Done 2026-09-29/30 (XLM-R 0.646, mBERT 0.634).
 3. **Gradient-flow verification** (Week 7): no test yet.
 4. **Multi-seed variance analysis** (Week 12).
 
@@ -107,3 +107,7 @@ Status key: ✅ done · 🟡 partial / done differently · ⬜ not started
 - **Dropped:** turn separators (no effect) and per-pair thresholds (no gain).
 - **Combined:** shared F1 +0.023, duration macro-F1 +0.073. `docs/results/2026-09-30_ablations.md`.
 - **Next (Week 9 tuning, on Kaggle):** XLM-R with the adopted flags, then a longer (3-epoch) run.
+
+## Pace check — 2026-10-06 (Week 5)
+
+**Still ahead of schedule.** Weeks 4–6 are met, and Week 5's backbone (XLM-R with a causal mask) was trained on Kaggle 2026-09-29. The team is onboarding this week (`docs/superpowers/plans/2026-10-06-team-kickoff-meeting.md`): each member runs one distinct XLM-R configuration on Kaggle (plain, adopted flags, a second seed, zero-shot with flags). Open against the named milestones: gradient-flow test (Week 7), multi-seed variance (Week 12, the first second-seed run starts this week), a second non-English L2.

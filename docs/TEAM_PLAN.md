@@ -44,7 +44,7 @@ These came from a first look at German→French errors (a short run with `pair_r
 
 ## Milestones
 
-The calendar is in Week 4 now (Sep 28 – Oct 4). Weeks follow [`TIMELINE.md`](TIMELINE.md).
+The calendar is in Week 5 now (Oct 5–11). Weeks follow [`TIMELINE.md`](TIMELINE.md).
 
 | Week | Dates | Everyone (own pairs) | Cross-cutting |
 |---|---|---|---|
