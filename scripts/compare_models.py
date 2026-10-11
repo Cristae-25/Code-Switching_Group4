@@ -35,6 +35,9 @@ DEFAULT_SPECS = [
     "data/anticipation_roberta.json",
     "data/anticipation_mbert.json",
     "data/anticipation_model_subword_zeroshot.json",
+    "data/baseline_anticipation_subword_6pairs.json:naive_l2:naive_l2 (6 script pairs, pieces)",
+    "data/baseline_anticipation_subword_6pairs.json:piece_lookup@tuned:piece lookup (6 script pairs)",
+    "data/anticipation_xlmr_ctx1_6pairs.json",     # notebook: CONTEXT = 1, PAIRS = the 6 script pairs
 ]
 
 
@@ -66,8 +69,11 @@ def iter_reports(specs):
         if "per_direction" not in data:                  # written before the shared report
             print(f"skipping {path}: old result format (re-run it to include it)")
             continue
+        run_args = data.get("args") or {}
         label = f"{data.get('model', 'scratch')} ({data.get('unit', 'word')})"
-        trained_on = [x for x in (data.get("args") or {}).get("train_langs", "").split(",") if x]
+        if run_args.get("context") == 1:                 # reads piece t only, no prefix
+            label = label[:-1] + ", current piece only)"
+        trained_on = [x for x in run_args.get("train_langs", "").split(",") if x]
         if trained_on:                                   # a zero-shot run: say what it saw
             label = label[:-1] + f", trained on {len(trained_on)} pairs)"
         yield label, data

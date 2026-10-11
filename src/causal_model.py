@@ -107,3 +107,28 @@ def check_causality(model, vocab_size: int, seq_len: int = 32,
                     float((dur_a[0, :t + 1] - dur_b[0, :t + 1]).abs().max()))
     return dict(max_abs_logit_drift=worst, causal=worst <= tol,
                 positions_tested=seq_len - 1)
+
+
+def check_context_free(model, vocab_size: int, seq_len: int = 32,
+                       device: str = "cpu", tol: float = 0.0) -> dict:
+    """Verify that the prediction at ``t`` reads token ``t`` and nothing else.
+
+    The current-token model (``context=1``) passes ``check_causality`` trivially,
+    so this rewrites every *other* position, past and future, and asserts that
+    no logit at ``t`` moves. A full-prefix model fails it.
+    """
+    model.eval().to(device)
+    g = torch.Generator(device="cpu").manual_seed(0)
+    words = torch.randint(3, vocab_size, (1, seq_len), generator=g).to(device)
+    langs = torch.randint(0, 2, (1, seq_len), generator=g).to(device)
+    sw_a, dur_a = model(words, langs)
+
+    worst = 0.0
+    for t in range(seq_len):
+        w2 = torch.randint(3, vocab_size, (1, seq_len), generator=g).to(device)
+        l2 = torch.randint(0, 2, (1, seq_len), generator=g).to(device)
+        w2[0, t], l2[0, t] = words[0, t], langs[0, t]
+        sw_b, dur_b = model(w2, l2)
+        worst = max(worst, float((sw_a[0, t] - sw_b[0, t]).abs()),
+                    float((dur_a[0, t] - dur_b[0, t]).abs().max()))
+    return dict(max_abs_logit_drift=worst, context_free=worst <= tol, positions_tested=seq_len)

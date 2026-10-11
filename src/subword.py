@@ -154,3 +154,33 @@ def write_parquet(frame: pd.DataFrame, path: str, row_group_size: int = 8192) ->
     ])
     table = pa.Table.from_pandas(frame[schema.names], schema=schema, preserve_index=False)
     pq.write_table(table, path, compression="snappy", row_group_size=row_group_size)
+
+
+def prefix_consistency(text: str, tokenizer):
+    """Does tokenizing the prefix alone reproduce each piece of the full text?
+
+    The stored pieces come from tokenizing the whole utterance, and SentencePiece
+    may segment the characters before t differently once it has seen what comes
+    after them. A model that really streams can only tokenize the prefix, so a
+    piece that changes is (weak) information from the future.
+
+    Returns ``(ids, last_ok, all_ok)``, one flag per piece: ``last_ok`` if the
+    prefix ``text[:end]`` ends in the same piece (what a current-token model
+    reads), ``all_ok`` if it reproduces every piece so far (what a full-prefix
+    model reads). Blank pieces carry the next character's offsets and are never
+    scored; they are reported consistent.
+    """
+    enc = tokenizer(text, add_special_tokens=False, return_offsets_mapping=True)
+    ids = list(enc["input_ids"])
+    blank = [is_blank(p) for p in tokenizer.convert_ids_to_tokens(ids)]
+    prefixes = [text[:e] for _, e in enc["offset_mapping"]]
+    redo = tokenizer(prefixes, add_special_tokens=False)["input_ids"] if prefixes else []
+    last_ok, all_ok = [], []
+    for i, (p, b) in enumerate(zip(redo, blank)):
+        if b:
+            last_ok.append(True)
+            all_ok.append(True)
+            continue
+        last_ok.append(p[-1:] == ids[i:i + 1])
+        all_ok.append(p == ids[:i + 1])
+    return ids, last_ok, all_ok

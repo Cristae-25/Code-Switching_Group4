@@ -9,7 +9,7 @@ import pytest
 
 from src.anticipation import L1, L2, NONE, token_slots
 from src.segments import repair_spans
-from src.subword import (align_words, build_frame, piece_languages, subword_row,
+from src.subword import (align_words, build_frame, is_blank, piece_languages, subword_row,
                          write_parquet)
 from src.tokenizer import tokenize_mixed
 
@@ -295,3 +295,53 @@ def test_pieces_record_their_word_and_utterance(tok):
     for p, w in zip(pieces, row["piece_word"]):
         if p.replace("▁", "") == "":
             assert w == -1                                        # a bare space marker has no word
+
+
+# --- prefix consistency: does the prefix alone reproduce each piece? -----------
+
+class _ShiftyTokenizer:
+    """Segments "abc" as ab|c, but its prefix "ab" as a|b: a leak to flag."""
+    table = {"abc": [("ab", 0, 2), ("c", 2, 3)], "ab": [("a", 0, 1), ("b", 1, 2)],
+             "a": [("a", 0, 1)]}
+    vocab = {"a": 1, "b": 2, "ab": 3, "c": 4}
+
+    def __call__(self, text, add_special_tokens=False, return_offsets_mapping=False):
+        if isinstance(text, list):
+            return {"input_ids": [self(t)["input_ids"] for t in text]}
+        segs = self.table[text]
+        out = {"input_ids": [self.vocab[p] for p, _, _ in segs]}
+        if return_offsets_mapping:
+            out["offset_mapping"] = [(s, e) for _, s, e in segs]
+        return out
+
+    def convert_ids_to_tokens(self, ids):
+        inv = {v: k for k, v in self.vocab.items()}
+        return [inv[i] for i in ids]
+
+
+def test_a_piece_the_prefix_would_not_produce_is_flagged():
+    from src.subword import prefix_consistency
+    ids, last_ok, all_ok = prefix_consistency("abc", _ShiftyTokenizer())
+    assert ids == [3, 4]
+    assert last_ok == [False, True]          # "ab" alone ends in "b", not "ab"
+    assert all_ok == [False, True]           # the last prefix is the whole text
+
+
+@pytest.mark.parametrize("text", ["東京都に行く", "我喜欢music很多", "meetings를 했어",
+                                  "Это очень интересно", "I love 香港人"])
+def test_xlmr_pieces_are_prefix_consistent(tok, text):
+    """Unigram SentencePiece decodes by Viterbi, whose best path through a piece
+    boundary is also the best path to it, so the prefix reproduces the pieces."""
+    from src.subword import prefix_consistency
+    _, last_ok, all_ok = prefix_consistency(text, tok)
+    assert all(last_ok) and all(all_ok)
+
+
+def test_blank_pieces_are_never_scored(tok):
+    """A bare "▁" carries the next character's offsets: it must be NONE, i.e. no label."""
+    from src.anticipation import anticipatory_labels
+    enc = tok("東京都に行く", add_special_tokens=False)
+    strs = tok.convert_ids_to_tokens(enc["input_ids"])
+    assert strs[0] == "▁" and is_blank(strs[0])
+    langs = np.array([NONE, 0, 0], dtype=np.int8)
+    assert anticipatory_labels(langs)["y_sw"][0] == -1

@@ -339,7 +339,7 @@ def _args(**kw):
     import argparse
     base = dict(unit="word", path=None, window=None, stride=None, vocab_size=None,
                 out=None, ckpt=None, names="script_words", no_lang=False, model="scratch", lr=None,
-                turn_sep=False, prev_lang=False, predict_at="piece")
+                turn_sep=False, prev_lang=False, predict_at="piece", context=None)
     return argparse.Namespace(**{**base, **kw})
 
 
@@ -483,6 +483,37 @@ def test_baseline_reports_include_the_shared_positions():
     assert rep["shared"]["overall"]["tp"] == 1 and rep["shared"]["overall"]["fp"] == 1
 
 
+
+def test_piece_lookup_learns_each_pieces_switch_rate():
+    mod = _baseline_script()
+    # piece 7 is followed by a switch 3 times in 4; piece 9 never; both in L1
+    train = dict(piece=np.array([7, 7, 7, 7, 9, 9, 9, 9]), cur_lang=np.zeros(8, int),
+                 y_sw=np.array([1, 1, 1, 0, 0, 0, 0, 0]))
+    lookup = mod.fit_piece_lookup(train, k=0.0)
+    p = lookup(np.array([7, 9]), np.array([0, 0]))
+    assert p[0] == pytest.approx(0.75) and p[1] == pytest.approx(0.0)
+
+
+def test_piece_lookup_backs_off_to_the_language_rate():
+    mod = _baseline_script()
+    train = dict(piece=np.array([7, 7, 9, 9]), cur_lang=np.array([0, 0, 1, 1]),
+                 y_sw=np.array([1, 0, 1, 1]))
+    lookup = mod.fit_piece_lookup(train, k=2.0)
+    unseen = lookup(np.array([42, 42]), np.array([0, 1]))
+    assert unseen[0] == pytest.approx(0.5) and unseen[1] == pytest.approx(1.0)
+    # seen pieces are shrunk toward their language's rate: (1 + 2*0.5) / (2 + 2)
+    assert lookup(np.array([7]), np.array([0]))[0] == pytest.approx(0.5)
+
+
+def test_piece_duration_lookup_takes_the_majority_class_with_backoff():
+    mod = _baseline_script()
+    train = dict(piece=np.array([7, 7, 7, 9]), cur_lang=np.array([0, 0, 0, 0]),
+                 y_sw=np.array([1, 1, 1, 1]), y_dur=np.array([2, 2, 0, 0]),
+                 dur_ok=np.array([True, True, True, True]))
+    fallback = np.array([1, 1])                       # per target language
+    dur = mod.fit_piece_duration(train, fallback)
+    assert list(dur(np.array([7, 9, 42]), np.array([0, 0, 0]))) == [2, 0, 1]
+
 # --- tuning flags: turn separators, previous-word language, word-end scoring ----
 
 def _rich_row(ids, langs, words, utts):
@@ -544,6 +575,27 @@ def test_sub_word_only_flags_are_refused_for_word_units():
             mod.resolve_defaults(_args(**flag))
         mod.resolve_defaults(_args(unit="subword", **flag))          # fine on pieces
 
+
+
+# --- current-token only (--context 1) ------------------------------------------
+
+def test_current_token_runs_get_their_own_outputs():
+    mod = _train_script()
+    a = mod.resolve_defaults(_args(model="xlmr", unit="subword", context=1))
+    assert a.ckpt == "models/anticipation_xlmr_ctx1.pt"
+    assert a.out == "data/anticipation_xlmr_ctx1.json"
+    b = mod.resolve_defaults(_args(model="xlmr", unit="subword", context=1, ckpt="x.pt"))
+    assert b.ckpt == "x.pt"                                     # an explicit path wins
+
+
+def test_current_token_runs_refuse_every_extra_input():
+    """Each of these would hand the model information beyond piece t."""
+    mod = _train_script()
+    for flag in (dict(turn_sep=True), dict(prev_lang=True), dict(predict_at="word_end")):
+        with pytest.raises(SystemExit):
+            mod.resolve_defaults(_args(model="xlmr", unit="subword", context=1, **flag))
+    with pytest.raises(SystemExit):
+        mod.resolve_defaults(_args(context=1))                  # the scratch model: no such mode
 
 # --- saved predictions trace back to their conversation and position ----------
 

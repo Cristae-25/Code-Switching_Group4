@@ -12,3 +12,5 @@ Every GPU (Kaggle) run, so nobody repeats someone else's run, and the team's 4 Ã
 | 2026-09-30 | Cristae | M3 (local) | ablations | seed 0, 6k steps, one flag at a time + combined | ~3.5 | combined flags: shared F1 +0.023, duration macro +0.073 | [results](results/2026-09-30_ablations.md) |
 | _next_ | _training lead_ | Kaggle T4 | `xlmr` | seed 0, 12k steps, no flags (gives shared F1 + predictions) | ~1.2 | | |
 | _next_ | _training lead_ | Kaggle T4 | `xlmr_durw_prev_wend` | seed 0, 12k steps, `DUR_WEIGHTS="balanced"`, `PREV_LANG=True`, `PREDICT_AT="word_end"` | ~1.2 | | |
+| _next_ | _training lead_ | Kaggle T4 | `xlmr_ctx1_6pairs` | seed 0, 12k steps, `CONTEXT = 1` (current piece only), `PAIRS` = Cantonese, Chinese, Japanese, Korean, Russian, Arabic | ~1.2 | | [design](results/2026-10-06_current_token_xlmr.md) |
+| _optional_ | _training lead_ | Kaggle T4 | `xlmr_6pairs` | as above with `CONTEXT = None`: the matched full-prefix comparison | ~1.2 | | |

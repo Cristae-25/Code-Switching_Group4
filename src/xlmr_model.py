@@ -18,6 +18,12 @@ language and pair inputs are accepted and ignored: on sub-word pieces the model
 reads the text only. Inputs are the backbone's raw piece ids, with no special
 tokens. Windows are right-padded, and under a causal mask a real position
 never attends to padding after it, so no attention mask is needed.
+
+``context=1`` is the current-token-only model, the pretrained counterpart of
+the ``naive_l2`` baseline. Every piece is encoded as its own length-1
+sequence, so the prediction at t reads piece t and nothing else (not even the
+past), and every piece gets the same position. In eval mode the model is then a
+function of the piece id alone.
 """
 from __future__ import annotations
 
@@ -31,8 +37,14 @@ BACKBONES = {"xlmr": "xlm-roberta-base", "roberta": "roberta-base",
 
 class CausalPretrained(nn.Module):
     def __init__(self, name: str = "xlm-roberta-base", config=None, pretrained: bool = True,
-                 n_dur: int = N_DUR, dropout: float = 0.1, use_lang: bool = False):
+                 n_dur: int = N_DUR, dropout: float = 0.1, use_lang: bool = False,
+                 context: int | None = None):
         super().__init__()
+        if context not in (None, 1):
+            raise ValueError("context is None (the whole prefix) or 1 (the current piece only)")
+        if context == 1 and use_lang:
+            raise ValueError("a current-token model takes no language input: it would be context")
+        self.context = context
         from transformers import AutoConfig, AutoModel
 
         causal = dict(is_decoder=True, add_cross_attention=False)
@@ -59,6 +71,13 @@ class CausalPretrained(nn.Module):
         self.head_dur = nn.Linear(d, n_dur)
 
     def forward(self, word_ids, lang_ids=None, pair_id=None):
+        if self.context == 1:                    # [b, t] -> [b*t, 1]: one piece per sequence
+            b, t = word_ids.shape
+            sw, dur = self._encode(word_ids.reshape(b * t, 1), None)
+            return sw.reshape(b, t), dur.reshape(b, t, -1)
+        return self._encode(word_ids, lang_ids)
+
+    def _encode(self, word_ids, lang_ids):
         # use_cache=False: a decoder-mode encoder would otherwise build a key/value
         # cache on every call, which only costs memory here.
         if self.lang_emb is None:

@@ -82,6 +82,9 @@ DUR_WEIGHTS = "none"    # "balanced": class-weighted duration loss (weights from
 TURN_SEP = False        # separator piece between speaker turns
 PREV_LANG = False       # input: the language of the last finished word
 PREDICT_AT = "piece"    # "word_end": train and score only at the last piece of each word
+CONTEXT = None          # 1: read the current piece only, no prefix (needs the three flags above off)
+PAIRS = ""              # comma-separated first languages to train and score on ("" = all 15),
+                        # e.g. "Cantonese,Chinese,Japanese,Korean,Russian,Arabic"
 SAVE_CHECKPOINT = True  # 0.5-1.1 GB in /kaggle/working
 LABELS_REPO = "cristae/switchlingua-tagged-final"
 """
@@ -150,11 +153,14 @@ common = (f"python scripts/train_anticipation.py --model {MODEL} --unit subword 
           f"--steps {steps} --batch-size {BATCH} --window {WINDOW} --stride {STRIDE} "
           f"--lr {LR} --head-lr {HEAD_LR} --eval-batches {evalb} --workers 2 "
           f"--seed {SEED} --dur-class-weights {DUR_WEIGHTS} --predict-at {PREDICT_AT}"
-          + (" --turn-sep" if TURN_SEP else "") + (" --prev-lang" if PREV_LANG else ""))
+          + (" --turn-sep" if TURN_SEP else "") + (" --prev-lang" if PREV_LANG else "")
+          + (f" --context {CONTEXT}" if CONTEXT else ""))
 TAG = MODEL + "".join(s for s, on in (("_durw", DUR_WEIGHTS != "none"), ("_sep", TURN_SEP),
-                                      ("_prev", PREV_LANG), ("_wend", PREDICT_AT == "word_end")) if on)
+                                      ("_prev", PREV_LANG), ("_wend", PREDICT_AT == "word_end"),
+                                      (f"_ctx{CONTEXT}", bool(CONTEXT)),
+                                      (f"_{len(PAIRS.split(','))}pairs", bool(PAIRS))) if on)
 if RUN_FULL:
-    cmd = (f"{common} --out data/anticipation_{TAG}.json --ckpt models/anticipation_{TAG}.pt "
+    cmd = (f"{common}" + (f" --train-langs {PAIRS}" if PAIRS else "") + f" --out data/anticipation_{TAG}.json --ckpt models/anticipation_{TAG}.pt "
            f"--save-preds data/preds_{TAG}.npz")
     print(cmd)
     get_ipython().system(f"{cmd} 2>&1 | tee logs/train_{TAG}.log")

@@ -108,6 +108,12 @@ Status key: ✅ done · 🟡 partial / done differently · ⬜ not started
 - **Combined:** shared F1 +0.023, duration macro-F1 +0.073. `docs/results/2026-09-30_ablations.md`.
 - **Next (Week 9 tuning, on Kaggle):** XLM-R with the adopted flags, then a longer (3-epoch) run.
 
+## Update — 2026-10-06 (current-token XLM-R)
+
+- **Built:** `--context 1` (XLM-R reads piece t only), `check_context_free`, the `piece_lookup` baseline, and `scripts/audit_prefix_tokenization.py`; notebook knobs `CONTEXT` and `PAIRS`.
+- **Local results on the 6 script-disjoint pairs:** the piece lookup reaches F1 0.427 against `naive_l2`'s 0.225. Prefix re-tokenization changes 0 of 2.68 M scored pieces, so XLM-R's pieces leak nothing from the future. `docs/results/2026-10-06_current_token_xlmr.md`.
+- **Next:** the `xlmr_ctx1_6pairs` Kaggle run (`RUN_LOG.md`).
+
 ## Pace check — 2026-10-06 (Week 5)
 
 **Still ahead of schedule.** Weeks 4–6 are met, and Week 5's backbone (XLM-R with a causal mask) was trained on Kaggle 2026-09-29. The team is onboarding this week (`docs/superpowers/plans/2026-10-06-team-kickoff-meeting.md`): each member runs one distinct XLM-R configuration on Kaggle (plain, adopted flags, a second seed, zero-shot with flags). Open against the named milestones: gradient-flow test (Week 7), multi-seed variance (Week 12, the first second-seed run starts this week), a second non-English L2.

@@ -98,3 +98,58 @@ def test_pretrained_models_can_take_a_language_input():
     b, _ = m(x, torch.ones(1, 10, dtype=torch.long))
     assert not torch.equal(a, b)                                  # the input is used
     assert check_causality(m, 300, seq_len=24)["max_abs_logit_drift"] == 0.0
+
+
+# --- current-token only (context=1): the pretrained counterpart of naive_l2 -----
+
+def test_current_token_model_reads_no_other_position():
+    """Stronger than check_causality: past *and* future positions are rewritten."""
+    m = CausalPretrained(config=_tiny_cfg("roberta"), context=1).eval()
+    g = torch.Generator().manual_seed(0)
+    x = torch.randint(5, 300, (1, 16), generator=g)
+    sw_a, dur_a = m(x)
+    for t in range(16):
+        y = torch.randint(5, 300, (1, 16), generator=g)
+        y[0, t] = x[0, t]
+        sw_b, dur_b = m(y)
+        assert sw_a[0, t] == sw_b[0, t] and torch.equal(dur_a[0, t], dur_b[0, t])
+
+
+def test_current_token_model_is_a_function_of_the_piece_id():
+    m = CausalPretrained(config=_tiny_cfg("roberta"), context=1).eval()
+    x = torch.tensor([[7, 9, 7, 11, 7, 9]])
+    sw, _ = m(x)
+    assert sw[0, 0] == sw[0, 2] == sw[0, 4] and sw[0, 1] == sw[0, 5]
+
+
+def test_current_token_model_keeps_the_output_shapes():
+    m = CausalPretrained(config=_tiny_cfg("roberta"), context=1).eval()
+    sw, dur = m(torch.randint(5, 300, (3, 10)))
+    assert sw.shape == (3, 10) and dur.shape == (3, 10, 3)
+    assert check_causality(m, 300, seq_len=24)["max_abs_logit_drift"] == 0.0
+
+
+def test_the_full_prefix_model_does_read_the_past():
+    """The context-free check must fail without context=1, or it proves nothing."""
+    m = CausalPretrained(config=_tiny_cfg("roberta")).eval()
+    a, _ = m(torch.tensor([[7, 9, 11, 13]]))
+    b, _ = m(torch.tensor([[8, 9, 11, 13]]))
+    assert a[0, 3] != b[0, 3]
+
+
+def test_current_token_model_rejects_a_language_input():
+    with pytest.raises(ValueError):
+        CausalPretrained(config=_tiny_cfg("roberta"), context=1, use_lang=True)
+
+
+def test_build_model_passes_the_context():
+    m = build_model(dict(model="xlmr", context=1), 300, xlmr_config=_tiny())
+    assert m.context == 1
+    assert build_model(dict(model="xlmr"), 300, xlmr_config=_tiny()).context is None
+
+
+def test_the_context_free_check_passes_ctx1_and_fails_the_prefix_model():
+    from src.causal_model import check_context_free
+    ok = check_context_free(CausalPretrained(config=_tiny_cfg("roberta"), context=1), 300)
+    assert ok["context_free"] and ok["max_abs_logit_drift"] == 0.0
+    assert not check_context_free(CausalPretrained(config=_tiny_cfg("roberta")), 300)["context_free"]

@@ -64,3 +64,15 @@ def test_shared_positions_get_their_own_column_and_table(tmp_path):
     assert runs[0]["shared_f1"] == 0.55 and runs[1]["shared_f1"] is None
     md = m.to_markdown(runs, m.pair_table(runs))
     assert "Shared F1" in md and "## Shared positions by language pair" in md
+
+
+def test_current_piece_runs_are_labelled_apart_from_full_prefix_runs(tmp_path):
+    full, ctx1 = tmp_path / "full.json", tmp_path / "ctx1.json"
+    six = "Cantonese,Chinese,Japanese,Korean,Russian,Arabic"
+    json.dump(dict(model="xlmr", unit="subword", args=dict(train_langs=six),
+                   **_report({"Korean->English": 0.8}, 0.5)), open(full, "w"))
+    json.dump(dict(model="xlmr", unit="subword", args=dict(train_langs=six, context=1),
+                   **_report({"Korean->English": 0.6}, 0.3)), open(ctx1, "w"))
+    labels = [r["label"] for r in _mod().load_runs([str(full), str(ctx1)])]
+    assert labels == ["xlmr (subword, trained on 6 pairs)",
+                      "xlmr (subword, current piece only, trained on 6 pairs)"]

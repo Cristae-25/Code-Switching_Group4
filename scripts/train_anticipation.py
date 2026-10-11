@@ -29,7 +29,7 @@ import torch.nn as nn
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.anticipation import N_DUR  # noqa: E402
-from src.causal_model import check_causality  # noqa: E402
+from src.causal_model import check_causality, check_context_free  # noqa: E402
 from src.evaluation import format_report, full_report  # noqa: E402
 from src.metrics import prf  # noqa: E402
 from src.models import build_model  # noqa: E402
@@ -65,6 +65,8 @@ def resolve_defaults(args):
     model = getattr(args, "model", "scratch")
     if model in PRETRAINED and args.unit != "subword":
         raise SystemExit(f"--model {model} reads sub-word pieces: use --unit subword")
+    context = getattr(args, "context", None)
+    explicit = {k for k in ("out", "ckpt") if getattr(args, k, None) is not None}
     for k, v in {**UNIT_DEFAULTS[args.unit], **MODEL_DEFAULTS[model]}.items():
         if getattr(args, k, None) is None:
             setattr(args, k, v)
@@ -80,6 +82,22 @@ def resolve_defaults(args):
                                      getattr(args, "predict_at", "piece") == "word_end")) if on]
     if subword_only and args.unit != "subword":
         raise SystemExit(f"{', '.join(subword_only)} need the sub-word labels: use --unit subword")
+    if context is not None:
+        if model not in PRETRAINED:
+            raise SystemExit("--context applies to the pretrained encoders only")
+        # Each of these gives the current-token model information beyond piece t:
+        # a separator or the previous word's language is context, and scoring only
+        # word ends tells it that the next piece starts a new word.
+        leaks = [f for f, on in (("--turn-sep", getattr(args, "turn_sep", False)),
+                                 ("--prev-lang", getattr(args, "prev_lang", False)),
+                                 ("--predict-at word_end",
+                                  getattr(args, "predict_at", "piece") == "word_end")) if on]
+        if leaks:
+            raise SystemExit(f"--context 1 reads piece t only: {', '.join(leaks)} would add context")
+        for k in ("out", "ckpt"):                # no run overwrites the full-prefix model
+            if k not in explicit:
+                root, ext = os.path.splitext(getattr(args, k))
+                setattr(args, k, f"{root}_ctx{context}{ext}")
     if args.window > 512 and model in PRETRAINED:
         raise SystemExit("pretrained encoders read at most 512 positions: use --window 512 or less")
     return args
@@ -203,6 +221,8 @@ def main() -> None:
                     help="input: the language of the last finished word (pieces)")
     ap.add_argument("--predict-at", choices=["piece", "word_end"], default="piece",
                     help="word_end: train and score only at the last piece of each word")
+    ap.add_argument("--context", type=int, choices=[1], default=None,
+                    help="pretrained: 1 = read the current piece only (no prefix); default the whole prefix")
     ap.add_argument("--names", choices=["script_words", "transparent", "script", "hybrid", "language"],
                     default="script_words",
                     help="how named entities count (see src/segments.py); word units only")
@@ -252,6 +272,13 @@ def main() -> None:
           f"{'PREFIX-ONLY OK' if chk['causal'] else 'LEAK'}")
     if not chk["causal"]:
         raise SystemExit("aborting: model is not causal")
+    if args.context == 1:                              # passes the check above trivially
+        cf = check_context_free(model, vocab_size, seq_len=32, device="cpu")
+        print(f"context-free check: max logit drift {cf['max_abs_logit_drift']:.2e} when every "
+              f"other position changes -> {'CURRENT PIECE ONLY OK' if cf['context_free'] else 'LEAK'}")
+        if not cf["context_free"]:
+            raise SystemExit("aborting: the current-token model reads other positions")
+        chk["context_free"] = cf
     model.to(dev)
 
     sep_id = None
@@ -264,7 +291,8 @@ def main() -> None:
                   lang_input="prev_word" if args.prev_lang else "current",
                   seed=args.seed if args.seed is not None else 0)
     print(f"flags: seed={args.seed} predict_at={args.predict_at} turn_sep={args.turn_sep} "
-          f"prev_lang={args.prev_lang} dur_class_weights={args.dur_class_weights}")
+          f"prev_lang={args.prev_lang} dur_class_weights={args.dur_class_weights} "
+          f"context={args.context or 'prefix'}")
     loader = lambda split, langs, workers=0: make_loader(  # noqa: E731
         args.path, vocab, split, args.batch_size, workers, languages=langs, **common)
     train_loader = loader("train", train_langs or None, args.workers)

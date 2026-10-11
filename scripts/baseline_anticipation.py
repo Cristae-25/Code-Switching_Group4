@@ -11,6 +11,13 @@ never sees its evaluation data.
     prior       Bernoulli(train base rate)      - chance
     naive_l2    switch iff the current token is second-language
     hazard      P(switch | current language, length of current run so far)
+    piece_lookup  P(switch | current piece id), sub-word units only
+
+``piece_lookup`` is the best any current-token-only model can do on the training
+data: one probability per piece id, shrunk toward the current language's rate
+(and backing off to it for pieces unseen in train). It is the bar for the
+current-token XLM-R (``train_anticipation.py --context 1``): that model can only
+beat a lookup table where its pretrained embedding generalises to rare pieces.
 
 The hazard model emits a probability, so it needs a decision threshold. That
 threshold is tuned on the VALIDATION split and then applied unchanged to test -
@@ -60,11 +67,13 @@ def run_position(langs: np.ndarray) -> np.ndarray:
     return pos
 
 
-def collect(path: str, split: str, limit: int | None = None, unit: str = "word"):
+def collect(path: str, split: str, limit: int | None = None, unit: str = "word",
+            languages=None):
     """Stream a split into flat arrays of causal features and labels."""
-    cur_lang, runpos, y_sw, y_dur, dur_ok, pair, shared = [], [], [], [], [], [], []
+    cur_lang, runpos, y_sw, y_dur, dur_ok, pair, shared, piece = [], [], [], [], [], [], [], []
     make = example_for(unit)
-    for i, row in enumerate(iter_rows(path, split=split, columns=COLUMNS[unit])):
+    for i, row in enumerate(iter_rows(path, split=split, columns=COLUMNS[unit],
+                                          languages=languages)):
         if limit and i >= limit:
             break
         ex = make(row)
@@ -78,12 +87,14 @@ def collect(path: str, split: str, limit: int | None = None, unit: str = "word")
         y_dur.append(ex["y_dur"][m].astype(np.int64))
         dur_ok.append(ex["dur_known"][m])
         shared.append(ex["shared"][m])
+        if "ids" in ex:                           # sub-word rows: the piece id itself
+            piece.append(ex["ids"][m].astype(np.int64))
         pair.append(np.full(int(m.sum()), PAIR_KEYS.index(
             pair_key(ex["first_language"], ex["second_language"]))))
     cat = lambda xs: np.concatenate(xs) if xs else np.empty(0, np.int64)  # noqa: E731
     return dict(cur_lang=cat(cur_lang), runpos=cat(runpos), y_sw=cat(y_sw),
                 y_dur=cat(y_dur), dur_ok=cat(dur_ok).astype(bool), pair=cat(pair),
-                shared=cat(shared).astype(bool))
+                shared=cat(shared).astype(bool), piece=cat(piece) if piece else None)
 
 
 def fit_hazard(train: dict) -> np.ndarray:
@@ -113,6 +124,49 @@ def fit_hazard_per_pair(train: dict, n_pairs: int = len(PAIR_KEYS),
                 if m.sum() >= min_count:
                     table[p, lang, pos] = train["y_sw"][m].mean()
     return table
+
+
+def fit_piece_lookup(train: dict, k: float = 1.0):
+    """P(switch at t+1 | piece id at t), fitted on train.
+
+    Each piece's rate is shrunk toward its current language's rate with ``k``
+    pseudo-counts, so a piece seen once is not a confident 0 or 1, and a piece
+    unseen in train gets the language rate. Returns ``f(piece, cur_lang) -> prob``.
+    """
+    lang_rate = np.array([train["y_sw"][train["cur_lang"] == lang].mean()
+                          if (train["cur_lang"] == lang).any() else 0.0 for lang in (0, 1)])
+    ids, inv = np.unique(train["piece"], return_inverse=True)
+    n = np.bincount(inv).astype(float)
+    hits = np.bincount(inv, weights=train["y_sw"]).astype(float)
+
+    def lookup(piece, cur_lang):
+        piece, prior = np.asarray(piece), lang_rate[np.asarray(cur_lang)]
+        j = np.clip(np.searchsorted(ids, piece), 0, len(ids) - 1)
+        seen = ids[j] == piece
+        cnt, hit = np.where(seen, n[j], 0.0), np.where(seen, hits[j], 0.0)
+        denom = cnt + k
+        return np.where(denom > 0, (hit + k * prior) / np.where(denom > 0, denom, 1), prior)
+    return lookup
+
+
+def fit_piece_duration(train: dict, fallback: np.ndarray):
+    """Majority duration class at true switches after each piece; ``fallback``
+    (indexed by the target language) for pieces with no such switch in train."""
+    m = (train["y_sw"] == 1) & train["dur_ok"]
+    ids, inv = np.unique(train["piece"][m], return_inverse=True)
+    counts = np.zeros((len(ids), N_DUR), dtype=np.int64)
+    np.add.at(counts, (inv, train["y_dur"][m]), 1)
+    best = counts.argmax(axis=1)
+
+    def lookup(piece, cur_lang):
+        piece = np.asarray(piece)
+        out = fallback[1 - np.asarray(cur_lang)].copy()
+        if len(ids):
+            j = np.clip(np.searchsorted(ids, piece), 0, len(ids) - 1)
+            seen = ids[j] == piece
+            out[seen] = best[j[seen]]
+        return out
+    return lookup
 
 
 def tune_on_val(prob_val, y_val, candidates):
@@ -149,6 +203,8 @@ def main() -> None:
     ap.add_argument("--limit", type=int, default=None, help="rows per split, for a smoke run")
     ap.add_argument("--threshold", type=float, default=0.5)
     ap.add_argument("--json", default=None)
+    ap.add_argument("--langs", default="",
+                    help="comma-separated first languages to keep (default: all pairs)")
     ap.add_argument("--names", choices=["script_words", "transparent", "script", "hybrid", "language"],
                     default="script_words",
                     help="how named entities count (see src/segments.py); needs an "
@@ -162,16 +218,17 @@ def main() -> None:
                          "built with script_words")
     args.json = args.json or ("data/baseline_anticipation.json" if args.unit == "word"
                               else "data/baseline_anticipation_subword.json")
-    print(f"unit {args.unit} | {args.path}")
+    langs = [x.strip() for x in args.langs.split(",") if x.strip()] or None
+    print(f"unit {args.unit} | {args.path}" + (f" | languages {', '.join(langs)}" if langs else ""))
 
     print("streaming train split ...", flush=True)
-    train = collect(args.path, "train", args.limit, args.unit)
+    train = collect(args.path, "train", args.limit, args.unit, langs)
     print(f"  {len(train['y_sw']):,} scored positions", flush=True)
     print("streaming val split ...", flush=True)
-    val = collect(args.path, "val", args.limit, args.unit)
+    val = collect(args.path, "val", args.limit, args.unit, langs)
     print(f"  {len(val['y_sw']):,} scored positions", flush=True)
     print("streaming test split ...", flush=True)
-    test = collect(args.path, "test", args.limit, args.unit)
+    test = collect(args.path, "test", args.limit, args.unit, langs)
     print(f"  {len(test['y_sw']):,} scored positions\n", flush=True)
 
     base = train["y_sw"].mean()
@@ -186,6 +243,14 @@ def main() -> None:
     print(f"hazard threshold tuned on val: tau={tau:.3f} (val F1 {best_f1:.3f}) | "
           f"per-pair hazard: tau={tau_pair:.3f} (val F1 {pair_f1:.3f})\n", flush=True)
 
+    lookup = None
+    if train["piece"] is not None:               # current-token bar for --context 1
+        lookup = fit_piece_lookup(train)
+        lk_val = lookup(val["piece"], val["cur_lang"])
+        lk_f1, tau_lk = tune_on_val(lk_val, val["y_sw"], np.quantile(lk_val, np.linspace(0, 1, 401)))
+        print(f"piece lookup threshold tuned on val: tau={tau_lk:.3f} (val F1 {lk_f1:.3f})\n",
+              flush=True)
+
     preds = {
         "never": np.zeros_like(test["y_sw"]),
         "always": np.ones_like(test["y_sw"]),
@@ -196,6 +261,9 @@ def main() -> None:
         "hazard_pair@tuned": (hz_pair[test["pair"], test["cur_lang"], test["runpos"]]
                               >= tau_pair).astype(np.int64),
     }
+    if lookup is not None:
+        preds["piece_lookup@tuned"] = (lookup(test["piece"], test["cur_lang"])
+                                       >= tau_lk).astype(np.int64)
 
     rows, detail = [], {}
     for name, yp in preds.items():
@@ -214,8 +282,9 @@ def main() -> None:
                     f"(base rate {test['y_sw'].mean():.4f})"))
 
     # Per-direction, for the best training-free baseline.
-    for name in ("hazard@tuned", "hazard_pair@tuned"):
-        print("\n" + format_report(detail[name], f"{name}:"))
+    for name in ("hazard@tuned", "hazard_pair@tuned", "piece_lookup@tuned"):
+        if name in detail:
+            print("\n" + format_report(detail[name], f"{name}:"))
 
     print("\nHazard table  P(switch at t+1 | current run length so far):")
     hz = [dict(run_len=str(pos),
@@ -232,6 +301,13 @@ def main() -> None:
     ds = duration_scores(d_true, d_pred)
     for name in ("hazard@tuned", "hazard_pair@tuned"):   # the training-free duration baseline
         detail[name]["duration"] = ds
+    if lookup is not None:
+        dur_lk = fit_piece_duration(train, dur_mode)
+        detail["piece_lookup@tuned"]["duration"] = duration_scores(
+            d_true, dur_lk(test["piece"][m], test["cur_lang"][m]))
+        dl = detail["piece_lookup@tuned"]["duration"]
+        print(f"\nDuration, piece lookup: 3-class accuracy {dl['accuracy']:.3f} | "
+              f"macro-F1 {dl['macro_f1']:.3f}")
     print(f"\nDuration at oracle switch positions (n={ds['n']:,}), "
           f"mode-per-direction baseline:")
     print(f"  3-class accuracy {ds['accuracy']:.3f} | macro-F1 {ds['macro_f1']:.3f} "
