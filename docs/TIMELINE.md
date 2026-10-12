@@ -9,14 +9,14 @@ Status key: ✅ done · 🟡 partial / done differently · ⬜ not started
 | 3 | Sep 21 – Sep 27 | Acquire SwitchLingua dataset, review language-pair selection | ✅ all 15 pairs, 4 held out (`groupUpdate1.md` §1) |
 | 4 | Sep 28 – Oct 4 | Sub-word tokenization & LID mapping, generate switch and duration labels, build streaming dataloaders | ✅ LID mapping, final per-token labels (AnE-LID, `script_words` names; private HF `CodeSwitchGroup4/switchlingua-tagged-final`), **sub-word labels** (XLM-R pieces with per-piece language, switch, integer duration and the 3 required classes), and **streaming dataloaders for both units** (`src/streaming.py`, `--unit subword`: 384-piece windows, no language input). Piece-level baselines in `docs/groupUpdate1.md` §4.6 |
 | 5 | Oct 5 – Oct 11 | Multilingual backbone setup (XLM-R / mBERT), implement causal attention mask | 🟡 **XLM-R backbone with a causal mask built** (`src/xlmr_model.py`, `is_decoder=True`, `check_causality` passes at 0.00 drift on the real model) and **trained on Kaggle (2026-09-29): switch F1 0.646 on pieces, macro-F1 0.676, 4 pairs above 0.7** (`docs/results/2026-09-29_xlmr_causal.md`). mBERT dropped: its tokenizer doesn't match the sub-word labels and gives 2.8% UNK on Cantonese |
-| 6 | Oct 12 – Oct 18 | Build dual-task heads (switch & duration) | ✅ `head_sw` / `head_dur` in `src/causal_model.py` |
+| 6 | Oct 12 – Oct 18 | Build dual-task heads (switch & duration) | ✅ `head_sw` / `head_dur` in `src/causal_model.py`, plus an ordinal duration head (`--dur-head ordinal`, 2026-10-11). Both heads trained on XLM-R for the 6 script pairs (2026-10-12) |
 | 7 | Oct 19 – Oct 25 | Implement multitask loss, verify gradient flow & end-to-end unit testing | 🟡 Multitask loss (`--dur-weight`) and end-to-end tests are done. There is no explicit gradient-flow test yet |
 | 8 | Oct 26 – Nov 1 | Train baseline models on 1–2 language pairs | ✅ exceeded: baselines run on all pairs; rerun on the final labels 2026-09-27 |
-| 9 | Nov 2 – Nov 8 | Extend training to all pairs and tune | 🟡 Trained on all pairs, plus a zero-shot run, both rerun on the final labels (F1 0.503; zero-shot 0.383). No tuning sweep yet |
+| 9 | Nov 2 – Nov 8 | Extend training to all pairs and tune | 🟡 Trained on all pairs, plus a zero-shot run, both rerun on the final labels (F1 0.503; zero-shot 0.383). Duration tuning done (2026-10-11/12): val-tuned class offsets adopted; class weighting and the ordinal head tried and not adopted. No hyperparameter sweep of the backbone yet |
 | 10 | Nov 9 – Nov 15 | Complete all training runs and checkpoint models | ⬜ Checkpoints exist for the from-scratch model only; the final (backbone) runs are still to come |
-| 11 | Nov 16 – Nov 22 | Anticipatory F1 and duration accuracy | 🟡 Metrics implemented and reported for the current model |
-| 12 | Nov 23 – Nov 29 | Macro-average accuracy, variance analysis | 🟡 Macro-F1 and Wilson CIs are done. There is no multi-seed variance analysis yet |
-| 13 | Nov 30 – Dec 6 | Pair-specific breakdown, identify best "universal predictor" model | 🟡 A per-pair breakdown exists; there is only one model to compare so far |
+| 11 | Nov 16 – Nov 22 | Anticipatory F1 and duration accuracy | 🟡 Metrics implemented and reported for every model. Since 2026-10-12, duration is also reported per pair, per direction and end to end (switch predicted *and* class right) |
+| 12 | Nov 23 – Nov 29 | Macro-average accuracy, variance analysis | 🟡 Macro-F1, Wilson CIs and row-level paired bootstrap CIs (`scripts/bootstrap_preds.py`, 2026-10-12) are done. There is no multi-seed variance analysis yet |
+| 13 | Nov 30 – Dec 6 | Pair-specific breakdown, identify best "universal predictor" model | 🟡 Per-pair breakdowns for every model, including the 6-pair XLM-R write-up with confusion matrices and switch direction (`docs/team_meeting1.md`). XLM-R beats mBERT as the universal backbone; the final choice waits on seeds and the adopted-flag run |
 | 14 | Dec 7 – Dec 13 | Research paper & streaming demo | ⬜ |
 | 15 | Dec 14 – Dec 20 | Final GitHub repository and presentation | ⬜ |
 
@@ -117,3 +117,22 @@ Status key: ✅ done · 🟡 partial / done differently · ⬜ not started
 ## Pace check — 2026-10-06 (Week 5)
 
 **Still ahead of schedule.** Weeks 4–6 are met, and Week 5's backbone (XLM-R with a causal mask) was trained on Kaggle 2026-09-29. The team is onboarding this week (`docs/superpowers/plans/2026-10-06-team-kickoff-meeting.md`): each member runs one distinct XLM-R configuration on Kaggle (plain, adopted flags, a second seed, zero-shot with flags). Open against the named milestones: gradient-flow test (Week 7), multi-seed variance (Week 12, the first second-seed run starts this week), a second non-English L2.
+
+## Update — 2026-10-12 (XLM-R on the 6 script pairs)
+
+- **Two Kaggle runs on Cantonese, Chinese, Japanese, Korean, Russian and Arabic → English** (`xlmr_6pairs`, plain; `xlmr_durw_6pairs`, class-weighted duration). Both pass `check_causality` (drift 0.0). `docs/results/2026-10-12_xlmr_6pairs_duration.md`.
+- **Switch:** F1 0.645 pooled, macro-F1 **0.703** (Korean 0.813 to Cantonese 0.625), against 0.450 for the best training-free baseline (piece lookup). Training on these 6 pairs alone matches the all-15-pairs model (0.698). The 9 Latin-script pairs, never trained on, reach 0.514.
+- **Direction:** switching into English is the weak direction on 5 of 6 pairs (average over pairs 0.634 vs 0.775 back into L1). The gap is mostly recall, and largest on Cantonese.
+- **Duration:** val-tuned macro-F1 **0.602** (Medium 0.406), against 0.473 for the piece lookup. Class weighting helps the raw argmax (+0.019) but equals tuning once tuned, so it isn't adopted.
+- **Validation:** row-level paired bootstrap shows weighting changes switch F1 by +0.000 [−0.001, +0.001].
+- **Team write-up:** `docs/team_meeting1.md`, with per-pair confusion-matrix figures, label provenance and the baselines.
+
+## Pace check — 2026-10-12 (start of Week 6)
+
+**Ahead of schedule.** Weeks 3–6 and 8 are done. Parts of Weeks 9, 11, 12 and 13 already exist: duration tuning, per-pair and end-to-end duration metrics, bootstrap intervals and per-pair breakdowns.
+
+**Still open against the named milestones:**
+1. **Gradient-flow test** (Week 7).
+2. **Multi-seed variance** (Week 12): bootstrap intervals cover test-set noise, not training noise.
+3. **Backbone tuning** (Week 9): the XLM-R run with previous-language input and word-end prediction is queued, as are `xlmr_ctx1_6pairs` and the second seed.
+4. **A second non-English L2**, beyond German→French.
