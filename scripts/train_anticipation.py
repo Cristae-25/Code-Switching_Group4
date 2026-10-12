@@ -169,6 +169,22 @@ def make_scheduler(opt, lrs, steps):
                                                pct_start=min(0.5, max(0.1, 2.5 / steps)))
 
 
+def optimizer_groups(model, args):
+    """``(param groups, max lrs)``. A pretrained body learns slowly and the new heads fast;
+    ``--freeze-backbone`` trains the heads only (a linear probe of the pretrained features)."""
+    if args.model not in PRETRAINED:
+        if args.freeze_backbone:
+            raise SystemExit("--freeze-backbone needs a pretrained --model")
+        return [dict(params=list(model.parameters()), lr=args.lr)], [args.lr]
+    heads = [p for n, p in model.named_parameters() if n.startswith("head_")]
+    body = [p for n, p in model.named_parameters() if not n.startswith("head_")]
+    if args.freeze_backbone:
+        for p in body:
+            p.requires_grad_(False)
+        return [dict(params=heads, lr=args.head_lr)], [args.head_lr]
+    return [dict(params=body, lr=args.lr), dict(params=heads, lr=args.head_lr)], [args.lr, args.head_lr]
+
+
 def tune_threshold(prob, truth):
     """Pick the F1-maximising threshold on a held-out split."""
     best = (0.0, 0.5)
@@ -249,6 +265,9 @@ def main() -> None:
                     help="ordinal: cumulative cuts P(>Small), P(>Medium) instead of a 3-way softmax")
     ap.add_argument("--context", type=int, choices=[1], default=None,
                     help="pretrained: 1 = read the current piece only (no prefix); default the whole prefix")
+    ap.add_argument("--freeze-backbone", action="store_true",
+                    help="pretrained: train the two heads only, the backbone stays as pretrained "
+                         "(with --steps 0 nothing is trained: random heads, val-tuned decisions)")
     ap.add_argument("--names", choices=["script_words", "transparent", "script", "hybrid", "language"],
                     default="script_words",
                     help="how named entities count (see src/segments.py); word units only")
@@ -318,19 +337,14 @@ def main() -> None:
                   seed=args.seed if args.seed is not None else 0)
     print(f"flags: seed={args.seed} predict_at={args.predict_at} turn_sep={args.turn_sep} "
           f"prev_lang={args.prev_lang} dur_class_weights={args.dur_class_weights} "
-          f"context={args.context or 'prefix'} dur_head={args.dur_head}")
+          f"context={args.context or 'prefix'} dur_head={args.dur_head} "
+          f"freeze_backbone={args.freeze_backbone}")
     loader = lambda split, langs, workers=0: make_loader(  # noqa: E731
         args.path, vocab, split, args.batch_size, workers, languages=langs, **common)
     train_loader = loader("train", train_langs or None, args.workers)
     val_loader, test_loader = loader("val", train_langs or None), loader("test", train_langs or None)
 
-    if args.model in PRETRAINED:                       # pretrained body slow, new heads fast
-        heads = [p for n, p in model.named_parameters() if n.startswith("head_")]
-        body = [p for n, p in model.named_parameters() if not n.startswith("head_")]
-        groups, lrs = [dict(params=body, lr=args.lr), dict(params=heads, lr=args.head_lr)], \
-            [args.lr, args.head_lr]
-    else:
-        groups, lrs = [dict(params=list(model.parameters()), lr=args.lr)], [args.lr]
+    groups, lrs = optimizer_groups(model, args)
     opt = torch.optim.AdamW(groups, weight_decay=0.01)
     sched = make_scheduler(opt, lrs, args.steps)
     scaler = torch.amp.GradScaler("cuda", enabled=dev.type == "cuda")

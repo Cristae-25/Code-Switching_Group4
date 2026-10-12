@@ -9,7 +9,8 @@ import sys
 import pytest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-BUILDERS = ["build_pretrained_notebook", "build_labels_notebook", "build_kaggle_notebook"]
+BUILDERS = ["build_pretrained_notebook", "build_untrained_notebook", "build_labels_notebook",
+            "build_kaggle_notebook"]
 
 
 def _builder(name):
@@ -51,11 +52,12 @@ def test_every_embedded_file_ships_what_it_imports(name):
     assert not missing, f"{name}.MODULES lacks: {sorted(missing)}"
 
 
-def test_the_pretrained_notebook_runs_its_training_script(tmp_path):
+@pytest.mark.parametrize("name", ["build_pretrained_notebook", "build_untrained_notebook"])
+def test_the_training_notebooks_run_their_training_script(tmp_path, name):
     """Write the notebook's %%writefile cells to a clean folder and import the
     training script from there, as Kaggle does: a module left out fails here."""
     out = tmp_path / "nb.ipynb"
-    b = _builder("build_pretrained_notebook")
+    b = _builder(name)
     b.OUT = str(out)
     if hasattr(b, "main"):
         argv, sys.argv = sys.argv, ["build"]
@@ -63,7 +65,7 @@ def test_the_pretrained_notebook_runs_its_training_script(tmp_path):
             b.main()
         finally:
             sys.argv = argv
-    nb = json.load(open(out if out.exists() else os.path.join(ROOT, "kaggle", "train_pretrained.ipynb")))
+    nb = json.load(open(out))
     work = tmp_path / "work"
     for d in ("src", "scripts"):
         (work / d).mkdir(parents=True)
@@ -75,3 +77,4 @@ def test_the_pretrained_notebook_runs_its_training_script(tmp_path):
     r = subprocess.run([sys.executable, "scripts/train_anticipation.py", "--help"], cwd=work,
                        capture_output=True, text=True, timeout=300)
     assert r.returncode == 0, r.stderr[-2000:]
+    assert "--freeze-backbone" in r.stdout

@@ -169,6 +169,7 @@ scripts/      command-line entry points (see "Common commands")
 tests/        pytest suite; fixtures/ holds frozen model outputs for the name edge cases
 kaggle/       load_labels.ipynb: download our labels, choose word/sub-word + names policy (CPU)
               train_pretrained.ipynb: fine-tune and evaluate causal XLM-R / RoBERTa / mBERT (GPU)
+              untrained_xlmr.ipynb: XLM-R without fine-tuning (random heads; linear probe) (GPU)
               label_switchlingua.ipynb: re-label the corpus from scratch (GPU, T4x2)
 notebooks/    switch_eda.ipynb: when switches happen and how long they last, by pair and persona
 docs/         write-ups (start here)

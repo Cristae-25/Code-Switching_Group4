@@ -153,3 +153,53 @@ def test_the_context_free_check_passes_ctx1_and_fails_the_prefix_model():
     ok = check_context_free(CausalPretrained(config=_tiny_cfg("roberta"), context=1), 300)
     assert ok["context_free"] and ok["max_abs_logit_drift"] == 0.0
     assert not check_context_free(CausalPretrained(config=_tiny_cfg("roberta")), 300)["context_free"]
+
+
+# --- --freeze-backbone: train the heads only ---------------------------------
+
+def _train_script():
+    import importlib.util, os
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    spec = importlib.util.spec_from_file_location(
+        "train_anticipation", os.path.join(root, "scripts", "train_anticipation.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def _probe_args(**kw):
+    import argparse
+    return argparse.Namespace(**{**dict(model="xlmr", lr=2e-5, head_lr=1e-3, freeze_backbone=False), **kw})
+
+
+def test_unfrozen_pretrained_trains_body_and_heads_at_two_rates():
+    m = CausalPretrained(config=_tiny_cfg("roberta"))
+    groups, lrs = _train_script().optimizer_groups(m, _probe_args())
+    assert lrs == [2e-5, 1e-3]
+    assert sum(len(g["params"]) for g in groups) == len(list(m.parameters()))
+
+
+def test_frozen_backbone_optimises_the_heads_only():
+    m = CausalPretrained(config=_tiny_cfg("roberta"))
+    groups, lrs = _train_script().optimizer_groups(m, _probe_args(freeze_backbone=True))
+    heads = {id(p) for n, p in m.named_parameters() if n.startswith("head_")}
+    assert lrs == [1e-3] and {id(p) for p in groups[0]["params"]} == heads
+    assert all(not p.requires_grad for n, p in m.named_parameters() if not n.startswith("head_"))
+
+
+def test_a_frozen_step_leaves_the_backbone_unchanged():
+    m = CausalPretrained(config=_tiny_cfg("roberta"))
+    groups, _ = _train_script().optimizer_groups(m, _probe_args(freeze_backbone=True))
+    before = {n: p.detach().clone() for n, p in m.named_parameters()}
+    opt = torch.optim.AdamW(groups)
+    sw, dur = m(torch.randint(0, 300, (2, 16)))
+    (sw.sum() + dur.sum()).backward()
+    opt.step()
+    for n, p in m.named_parameters():
+        assert torch.equal(p, before[n]) != n.startswith("head_"), n
+
+
+def test_freezing_needs_a_pretrained_model():
+    with pytest.raises(SystemExit):
+        _train_script().optimizer_groups(torch.nn.Linear(2, 2),
+                                         _probe_args(model="scratch", freeze_backbone=True))

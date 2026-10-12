@@ -41,6 +41,8 @@ DEFAULT_SPECS = [
     "data/anticipation_xlmr_6pairs.json",          # notebook: PAIRS = the 6 script pairs
     "data/anticipation_xlmr_durw_6pairs.json",     # ... plus DUR_WEIGHTS = "balanced"
     "data/anticipation_xlmr_ord_6pairs.json",      # ... DUR_HEAD = "ordinal" instead
+    "data/anticipation_xlmr_untrained_6pairs.json",  # untrained_xlmr.ipynb: frozen backbone, random heads
+    "data/anticipation_xlmr_probe_6pairs.json",      # ... frozen backbone, heads trained
 ]
 
 
@@ -80,6 +82,8 @@ def iter_reports(specs):
         label = f"{data.get('model', 'scratch')} ({data.get('unit', 'word')})"
         if run_args.get("context") == 1:                 # reads piece t only, no prefix
             label = label[:-1] + ", current piece only)"
+        if run_args.get("freeze_backbone"):              # the backbone exactly as pretrained
+            label = label[:-1] + (", untrained)" if data.get("steps") == 0 else ", frozen backbone)")
         if run_args.get("dur_class_weights", "none") != "none":
             label = label[:-1] + ", class-weighted duration)"
         if run_args.get("dur_head", "softmax") == "ordinal":
