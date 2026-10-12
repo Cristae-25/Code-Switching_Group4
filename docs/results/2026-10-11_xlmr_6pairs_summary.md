@@ -52,7 +52,7 @@ The question at each true switch point: how long will the new run be? The classe
 
 Medium is the weak class: most Medium runs are predicted Large (18,216) or Small (14,015). Class-weighted duration loss (`DUR_WEIGHTS="balanced"`) raised Medium F1 from 0.075 to 0.295 in the local ablations ([record](2026-09-30_ablations.md)).
 
-**Per-pair duration is now reported** (2026-10-11): `full_report` writes `duration_per_pair`, `duration_per_direction` and an end-to-end score, and the saved predictions carry each duration point's pair, direction, row and switch logit. The queued `xlmr_6pairs` and `xlmr_durw_6pairs` runs will fill this section; `scripts/bootstrap_preds.py` gives their row-level 95% intervals and the paired difference.
+**Per-pair duration results:** see [2026-10-12_xlmr_6pairs_duration.md](2026-10-12_xlmr_6pairs_duration.md). XLM-R trained on these 6 pairs reaches duration macro-F1 0.602 after val tuning (Medium 0.406), with 0.593–0.623 per pair.
 
 ## 3. What information is used to train and evaluate
 
