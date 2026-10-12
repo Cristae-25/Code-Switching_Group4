@@ -21,7 +21,7 @@ import shutil
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-REPO = "cristae/switchlingua-tagged-final"
+REPO = "CodeSwitchGroup4/switchlingua-tagged-final"
 TARGETS = ["token_labels_word.parquet", "token_labels_subword.parquet"]
 EXTRA = ["tagged.parquet", "switchlingua_tagged_rows.csv", "README.md"]
 

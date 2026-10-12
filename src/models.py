@@ -19,8 +19,10 @@ def build_model(cfg: dict, vocab_size: int, n_pairs: int = 14, use_pair: bool = 
             or BACKBONES[model]
         cls = CausalXLMR if model == "xlmr" else CausalPretrained
         return cls(name, config=xlmr_config, pretrained=pretrained, n_dur=n_dur,
-                   use_lang=cfg.get("prev_lang", False), context=cfg.get("context"))
+                   use_lang=cfg.get("prev_lang", False), context=cfg.get("context"),
+                   dur_head=cfg.get("dur_head", "softmax"))
     return CausalSwitchModel(vocab_size, d_model=cfg["d_model"], n_layers=cfg["layers"],
                              n_heads=cfg["heads"], d_ff=cfg["d_model"] * 2,
                              max_len=cfg["window"], n_pairs=n_pairs, use_pair=use_pair,
-                             use_lang=use_lang, n_dur=n_dur)
+                             use_lang=use_lang, n_dur=n_dur,
+                             dur_head=cfg.get("dur_head", "softmax"))

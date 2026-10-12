@@ -103,6 +103,13 @@ def format_report(report: dict, title: str) -> str:
                            "\nBy direction:"))
     pp = sorted(report["per_pair"].items(), key=lambda kv: -kv[1]["f1"])
     parts.append(fmt_table([_row(k, v) for k, v in pp], cols, "\nBy language pair:"))
+    parts.extend(duration_parts(report))
+    return "\n".join(parts)
+
+
+def duration_parts(report: dict) -> list[str]:
+    """The duration lines of ``format_report``: pooled, end to end, per pair, per direction."""
+    parts = []
     if "duration" in report:
         d = report["duration"]
         parts.append(f"\nDuration (true switch points, n={d['n']:,}): 3-class accuracy "
@@ -132,4 +139,8 @@ def format_report(report: dict, title: str) -> str:
                      macroF1=f"{d['macro_f1']:.3f}")
                 for k, d in report["duration_per_direction"].items()]
         parts.append(fmt_table(rows, ["name", "n", "acc", "macroF1"], "\nDuration by direction:"))
-    return "\n".join(parts)
+    return parts
+
+
+def format_duration(report: dict, title: str) -> str:
+    return "\n".join([title, *duration_parts(report)])

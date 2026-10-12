@@ -40,6 +40,7 @@ DEFAULT_SPECS = [
     "data/anticipation_xlmr_ctx1_6pairs.json",     # notebook: CONTEXT = 1, PAIRS = the 6 script pairs
     "data/anticipation_xlmr_6pairs.json",          # notebook: PAIRS = the 6 script pairs
     "data/anticipation_xlmr_durw_6pairs.json",     # ... plus DUR_WEIGHTS = "balanced"
+    "data/anticipation_xlmr_ord_6pairs.json",      # ... DUR_HEAD = "ordinal" instead
 ]
 
 
@@ -53,6 +54,8 @@ def _summary(label: str, rep: dict) -> dict:
                 shared_per_pair={k: v["f1"] for k, v in sh["per_pair"].items()} if sh else {},
                 into_l2=d.get("into L2", {}).get("f1"), into_l1=d.get("into L1", {}).get("f1"),
                 dur_acc=dur.get("accuracy"), dur_macro_f1=dur.get("macro_f1"),
+                dur_tuned_macro_f1=((rep.get("duration_tuned") or {}).get("report", {})
+                                    .get("duration", {}).get("macro_f1")),
                 per_pair={k: v["f1"] for k, v in rep["per_pair"].items()},
                 dur_per_pair={k: v["macro_f1"] for k, v in
                               (rep.get("duration_per_pair") or {}).items()})
@@ -79,6 +82,8 @@ def iter_reports(specs):
             label = label[:-1] + ", current piece only)"
         if run_args.get("dur_class_weights", "none") != "none":
             label = label[:-1] + ", class-weighted duration)"
+        if run_args.get("dur_head", "softmax") == "ordinal":
+            label = label[:-1] + ", ordinal duration)"
         trained_on = [x for x in run_args.get("train_langs", "").split(",") if x]
         if trained_on:                                   # a zero-shot run: say what it saw
             label = label[:-1] + f", trained on {len(trained_on)} pairs)"
@@ -117,12 +122,12 @@ def to_markdown(runs, table: pd.DataFrame) -> str:
              "every tokenizer (and the word model) has in common. It is the fair comparison "
              "between models with different tokenizers. It is empty for runs made before it "
              "existed.", "",
-             "| Model | Switch F1 | Macro-F1 over pairs | Shared F1 (non-CJK words) | F1 into L2 | F1 into L1 | Duration acc | Duration macro-F1 |",
-             "|---|---:|---:|---:|---:|---:|---:|---:|"]
+             "| Model | Switch F1 | Macro-F1 over pairs | Shared F1 (non-CJK words) | F1 into L2 | F1 into L1 | Duration acc | Duration macro-F1 | Duration macro-F1, val-tuned |",
+             "|---|---:|---:|---:|---:|---:|---:|---:|---:|"]
     for r in runs:
         lines.append(f"| {r['label']} | {_f(r['f1'])} | {_f(r['macro_f1'])} | {_f(r['shared_f1'])} | "
                      f"{_f(r['into_l2'])} | {_f(r['into_l1'])} | {_f(r['dur_acc'])} | "
-                     f"{_f(r['dur_macro_f1'])} |")
+                     f"{_f(r['dur_macro_f1'])} | {_f(r['dur_tuned_macro_f1'])} |")
     lines += ["", "## Switch F1 by language pair", "",
               "Pairs are sorted from easiest to hardest (mean F1 across the models shown). "
               "**Bold** marks the best model for each pair.", "",

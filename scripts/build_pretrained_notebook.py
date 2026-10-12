@@ -59,7 +59,7 @@ The report (`src/evaluation.py`) covers switch P/R/F1 overall, per language pair
 ## How to run
 
 1. **Settings:** set the Accelerator to **GPU T4 ×2** (one GPU is used) and turn Internet **on**.
-2. **Secret:** Add-ons → Secrets → `HF_TOKEN`, a read token with access to both `cristae/switchlingua-tagged-final` (our labels) and the gated `Shelton1013/SwitchLingua_text` (the original text).
+2. **Secret:** Add-ons → Secrets → `HF_TOKEN`, a read token with access to both `CodeSwitchGroup4/switchlingua-tagged-final` (our labels; a fine-grained token needs the `CodeSwitchGroup4` org added under its permissions) and the gated `Shelton1013/SwitchLingua_text` (the original text).
 3. **Settings cell:** set `MODEL`, then **Save Version → Save & Run All**, so the run continues if you close the browser.
    - Use `SMOKE = True` first for a quick check.
    - A full run of 12,000 steps took about 72 minutes on a T4 for XLM-R; RoBERTa and mBERT are smaller.
@@ -79,6 +79,7 @@ EVAL_BATCHES = 0        # 0 = score the whole val and test splits
 # Tuning flags (all off = the baseline setup). See README "How models are evaluated".
 SEED = 0                # reproducible initialisation and data order
 DUR_WEIGHTS = "none"    # "balanced": class-weighted duration loss (weights from the train split)
+DUR_HEAD = "softmax"    # "ordinal": cumulative cuts P(>Small), P(>Medium) (duration is ordered)
 TURN_SEP = False        # separator piece between speaker turns
 PREV_LANG = False       # input: the language of the last finished word
 PREDICT_AT = "piece"    # "word_end": train and score only at the last piece of each word
@@ -86,7 +87,7 @@ CONTEXT = None          # 1: read the current piece only, no prefix (needs the t
 PAIRS = ""              # comma-separated first languages to train and score on ("" = all 15),
                         # e.g. "Cantonese,Chinese,Japanese,Korean,Russian,Arabic"
 SAVE_CHECKPOINT = True  # 0.5-1.1 GB in /kaggle/working
-LABELS_REPO = "cristae/switchlingua-tagged-final"
+LABELS_REPO = "CodeSwitchGroup4/switchlingua-tagged-final"
 """
 
 SETUP = """
@@ -152,10 +153,11 @@ steps, evalb = (60, 20) if SMOKE else (STEPS, EVAL_BATCHES)
 common = (f"python scripts/train_anticipation.py --model {MODEL} --unit subword "
           f"--steps {steps} --batch-size {BATCH} --window {WINDOW} --stride {STRIDE} "
           f"--lr {LR} --head-lr {HEAD_LR} --eval-batches {evalb} --workers 2 "
-          f"--seed {SEED} --dur-class-weights {DUR_WEIGHTS} --predict-at {PREDICT_AT}"
+          f"--seed {SEED} --dur-class-weights {DUR_WEIGHTS} --dur-head {DUR_HEAD} --predict-at {PREDICT_AT}"
           + (" --turn-sep" if TURN_SEP else "") + (" --prev-lang" if PREV_LANG else "")
           + (f" --context {CONTEXT}" if CONTEXT else ""))
-TAG = MODEL + "".join(s for s, on in (("_durw", DUR_WEIGHTS != "none"), ("_sep", TURN_SEP),
+TAG = MODEL + "".join(s for s, on in (("_durw", DUR_WEIGHTS != "none"), ("_ord", DUR_HEAD == "ordinal"),
+                                      ("_sep", TURN_SEP),
                                       ("_prev", PREV_LANG), ("_wend", PREDICT_AT == "word_end"),
                                       (f"_ctx{CONTEXT}", bool(CONTEXT)),
                                       (f"_{len(PAIRS.split(','))}pairs", bool(PAIRS))) if on)
@@ -198,6 +200,11 @@ for f in (f"data/anticipation_{TAG}.json", f"data/anticipation_{TAG}_zeroshot.js
               + ", ".join(f"{k} {v['f1']:.3f}" for k, v in z["per_pair"].items()))
     display(pd.DataFrame({k: {"F1": v["f1"], "P": v["precision"], "R": v["recall"], "n": v["n"]}
                           for k, v in r["per_pair"].items()}).T.sort_values("F1", ascending=False).round(3))
+    if "duration_tuned" in r:
+        t = r["duration_tuned"]["report"]["duration"]
+        print(f"  duration, offsets tuned on val {r['duration_tuned']['offsets']}: accuracy "
+              f"{t['accuracy']:.3f} | macro-F1 {t['macro_f1']:.3f} | F1 small/medium/large "
+              + " / ".join(f"{f:.3f}" for f in t["per_class_f1"]))
     if "duration_end_to_end" in r:
         e = r["duration_end_to_end"]
         print(f"  duration end to end (switch predicted AND class right): accuracy "

@@ -30,3 +30,4 @@ __pycache__/
 .idea/
 .superpowers/
 .claude/settings.local.json
+logs/

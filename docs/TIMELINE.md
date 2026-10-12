@@ -7,7 +7,7 @@ Status key: ✅ done · 🟡 partial / done differently · ⬜ not started
 | Week | Dates | Milestone | Status |
 |---|---|---|---|
 | 3 | Sep 21 – Sep 27 | Acquire SwitchLingua dataset, review language-pair selection | ✅ all 15 pairs, 4 held out (`groupUpdate1.md` §1) |
-| 4 | Sep 28 – Oct 4 | Sub-word tokenization & LID mapping, generate switch and duration labels, build streaming dataloaders | ✅ LID mapping, final per-token labels (AnE-LID, `script_words` names; private HF `cristae/switchlingua-tagged-final`), **sub-word labels** (XLM-R pieces with per-piece language, switch, integer duration and the 3 required classes), and **streaming dataloaders for both units** (`src/streaming.py`, `--unit subword`: 384-piece windows, no language input). Piece-level baselines in `docs/groupUpdate1.md` §4.6 |
+| 4 | Sep 28 – Oct 4 | Sub-word tokenization & LID mapping, generate switch and duration labels, build streaming dataloaders | ✅ LID mapping, final per-token labels (AnE-LID, `script_words` names; private HF `CodeSwitchGroup4/switchlingua-tagged-final`), **sub-word labels** (XLM-R pieces with per-piece language, switch, integer duration and the 3 required classes), and **streaming dataloaders for both units** (`src/streaming.py`, `--unit subword`: 384-piece windows, no language input). Piece-level baselines in `docs/groupUpdate1.md` §4.6 |
 | 5 | Oct 5 – Oct 11 | Multilingual backbone setup (XLM-R / mBERT), implement causal attention mask | 🟡 **XLM-R backbone with a causal mask built** (`src/xlmr_model.py`, `is_decoder=True`, `check_causality` passes at 0.00 drift on the real model) and **trained on Kaggle (2026-09-29): switch F1 0.646 on pieces, macro-F1 0.676, 4 pairs above 0.7** (`docs/results/2026-09-29_xlmr_causal.md`). mBERT dropped: its tokenizer doesn't match the sub-word labels and gives 2.8% UNK on Cantonese |
 | 6 | Oct 12 – Oct 18 | Build dual-task heads (switch & duration) | ✅ `head_sw` / `head_dur` in `src/causal_model.py` |
 | 7 | Oct 19 – Oct 25 | Implement multitask loss, verify gradient flow & end-to-end unit testing | 🟡 Multitask loss (`--dur-weight`) and end-to-end tests are done. There is no explicit gradient-flow test yet |
@@ -35,7 +35,7 @@ Status key: ✅ done · 🟡 partial / done differently · ⬜ not started
 ## Update — 2026-09-27
 
 - **Labelling:** production for Latin-script rows with English as L2 switched to AnE-LID, which scores 99.4% on LinCE Spanish–English against 94.1% for dict-freq. Proper nouns now get a transparent `NE` label, and Devanagari tokens in romanized Hindi rows are fixed.
-- **Re-tag done:** the final labels were built locally from the Kaggle v1 run and published privately to Hugging Face (`cristae/switchlingua-tagged-final`). Names now follow the `script_words` policy rather than being skipped.
+- **Re-tag done:** the final labels were built locally from the Kaggle v1 run and published privately to Hugging Face (`cristae/switchlingua-tagged-final`, since moved to `CodeSwitchGroup4/switchlingua-tagged-final`). Names now follow the `script_words` policy rather than being skipped.
 
 ## Update — 2026-09-27 (final labels)
 

@@ -35,13 +35,63 @@ import torch.nn as nn
 from .anticipation import N_DUR
 
 
+DUR_HEADS = ("softmax", "ordinal")
+
+
+class OrdinalHead(nn.Module):
+    """Cumulative-link duration head: one logit per cut, ``P(class > k)``.
+
+    Small < Medium < Large is ordered, and a softmax head ignores that. This
+    head scores one shared projection ``s = w.h`` against ``n_classes - 1``
+    cut points (CORAL-style), so the classes are the intervals between cuts.
+    The cuts are kept in order by construction: each one is the last minus a
+    softplus gap, so ``P(> Small) >= P(> Medium)`` always holds and the class
+    probabilities from ``duration_probs`` are never negative.
+    """
+
+    def __init__(self, d: int, n_classes: int = N_DUR):
+        super().__init__()
+        self.proj = nn.Linear(d, 1)
+        # Start near the corpus shares (about 25 / 25 / 50): P(>Small) 0.75, P(>Medium) 0.5.
+        self.first = nn.Parameter(torch.tensor(1.1))
+        self.gaps = nn.Parameter(torch.full((n_classes - 2,), 0.7))
+
+    def forward(self, h):
+        offs = torch.cat([self.first.reshape(1),
+                          self.first - torch.cumsum(nn.functional.softplus(self.gaps), 0)])
+        return self.proj(h) + offs
+
+
+def make_dur_head(d: int, n_dur: int = N_DUR, kind: str = "softmax") -> nn.Module:
+    if kind not in DUR_HEADS:
+        raise ValueError(f"dur_head is one of {DUR_HEADS}")
+    return OrdinalHead(d, n_dur) if kind == "ordinal" else nn.Linear(d, n_dur)
+
+
+def duration_probs(dur, ordinal: bool):
+    """Class probabilities from the duration head's output, either kind."""
+    if not ordinal:
+        return torch.softmax(dur, -1)
+    c = torch.sigmoid(dur)                                  # [..., n-1]: P(class > k)
+    one, zero = torch.ones_like(c[..., :1]), torch.zeros_like(c[..., :1])
+    upper = torch.cat([one, c], -1)
+    return (upper - torch.cat([c, zero], -1)).clamp(min=0)
+
+
+def ordinal_targets(y_dur, n_dur: int = N_DUR):
+    """``[y > 0, y > 1, ...]`` as floats: the cumulative targets of ``OrdinalHead``."""
+    k = torch.arange(n_dur - 1, device=y_dur.device)
+    return (y_dur.unsqueeze(-1) > k).float()
+
+
 class CausalSwitchModel(nn.Module):
     def __init__(self, vocab_size: int, d_model: int = 256, n_layers: int = 4,
                  n_heads: int = 4, d_ff: int = 512, max_len: int = 512,
                  dropout: float = 0.1, n_pairs: int = 16, use_pair: bool = False,
-                 use_lang: bool = True, n_dur: int = N_DUR):
+                 use_lang: bool = True, n_dur: int = N_DUR, dur_head: str = "softmax"):
         super().__init__()
         self.d_model = d_model
+        self.dur_ordinal = dur_head == "ordinal"
         self.use_pair = use_pair
         self.word_emb = nn.Embedding(vocab_size, d_model, padding_idx=0)
         # 2 real slots + 1 pad slot; the language of the CURRENT token only.
@@ -61,7 +111,7 @@ class CausalSwitchModel(nn.Module):
                                              norm=nn.LayerNorm(d_model),
                                              enable_nested_tensor=False)
         self.head_sw = nn.Linear(d_model, 1)
-        self.head_dur = nn.Linear(d_model, n_dur)
+        self.head_dur = make_dur_head(d_model, n_dur, dur_head)
 
     def forward(self, word_ids, lang_ids=None, pair_id=None):
         b, t = word_ids.shape

@@ -27,6 +27,7 @@
       "into_l1": 0.3823109271362035,
       "dur_acc": 0.5847302507496899,
       "dur_macro_f1": 0.42802562224345686,
+      "dur_tuned_macro_f1": null,
       "per_pair": {
         "Arabic->English": 0.238814600650524,
         "Cantonese->English": 0.3273477449796994,
@@ -73,6 +74,7 @@
       "into_l1": 0.3929718249194255,
       "dur_acc": 0.5847302507496899,
       "dur_macro_f1": 0.42802562224345686,
+      "dur_tuned_macro_f1": null,
       "per_pair": {
         "Arabic->English": 0.32228827599649157,
         "Cantonese->English": 0.328468362503831,
@@ -119,6 +121,7 @@
       "into_l1": 0.28906424527429087,
       "dur_acc": 0.5093762086303111,
       "dur_macro_f1": 0.22498310039948946,
+      "dur_tuned_macro_f1": null,
       "per_pair": {
         "Arabic->English": 0.19749721224135794,
         "Cantonese->English": 0.24872549469883518,
@@ -165,6 +168,7 @@
       "into_l1": 0.2988222198114231,
       "dur_acc": 0.5093762086303111,
       "dur_macro_f1": 0.22498310039948946,
+      "dur_tuned_macro_f1": null,
       "per_pair": {
         "Arabic->English": 0.24108269296937726,
         "Cantonese->English": 0.25170250813034495,
@@ -211,6 +215,7 @@
       "into_l1": 0.32694696130801065,
       "dur_acc": 0.6272150261206559,
       "dur_macro_f1": 0.44562293151351634,
+      "dur_tuned_macro_f1": null,
       "per_pair": {
         "Arabic->English": 0.2242562929061785,
         "Cantonese->English": 0.2769323630163624,
@@ -257,6 +262,7 @@
       "into_l1": 0.3071810014752351,
       "dur_acc": 0.552109105937457,
       "dur_macro_f1": 0.40184853538266724,
+      "dur_tuned_macro_f1": null,
       "per_pair": {
         "Arabic->English": 0.1755151938526022,
         "Cantonese->English": 0.26524570751924215,
@@ -303,6 +309,7 @@
       "into_l1": 0.6512036500446137,
       "dur_acc": 0.7114014053554837,
       "dur_macro_f1": 0.5699743343774221,
+      "dur_tuned_macro_f1": null,
       "per_pair": {
         "Arabic->English": 0.48179471200925844,
         "Cantonese->English": 0.4977902981088733,
@@ -349,6 +356,7 @@
       "into_l1": 0.556906576569498,
       "dur_acc": 0.6365766064423449,
       "dur_macro_f1": 0.481915643471942,
+      "dur_tuned_macro_f1": null,
       "per_pair": {
         "Arabic->English": 0.40016621649698736,
         "Cantonese->English": 0.43931414837228266,
@@ -379,6 +387,7 @@
       "into_l1": 0.7592446282784155,
       "dur_acc": 0.6781203381402288,
       "dur_macro_f1": 0.5754514551682394,
+      "dur_tuned_macro_f1": null,
       "per_pair": {
         "Arabic->English": 0.6635258645057949,
         "Cantonese->English": 0.6193606328702731,
@@ -409,6 +418,7 @@
       "into_l1": 0.7635534631994514,
       "dur_acc": 0.6743496180400599,
       "dur_macro_f1": 0.5738257053826024,
+      "dur_tuned_macro_f1": null,
       "per_pair": {
         "Arabic->English": 0.6664072380581769,
         "Cantonese->English": 0.6226347177227135,
@@ -434,6 +444,7 @@
       "into_l1": 0.7298510653459702,
       "dur_acc": 0.6603536235935425,
       "dur_macro_f1": 0.5624423478247916,
+      "dur_tuned_macro_f1": null,
       "per_pair": {
         "German->English": 0.6531639199899358,
         "German->French": 0.4498901861056525,
@@ -470,6 +481,7 @@
       "into_l1": 0.7594906837396372,
       "dur_acc": 0.71268218762915,
       "dur_macro_f1": 0.5764938840281438,
+      "dur_tuned_macro_f1": null,
       "per_pair": {
         "Arabic->English": 0.6489865504830461,
         "Cantonese->English": 0.6093330864514046,
@@ -500,6 +512,7 @@
       "into_l1": 0.5654566567375171,
       "dur_acc": 0.6318811855196492,
       "dur_macro_f1": 0.48087721862586724,
+      "dur_tuned_macro_f1": null,
       "per_pair": {
         "Arabic->English": 0.40586656441717794,
         "Cantonese->English": 0.4494497425907299,
@@ -525,6 +538,7 @@
       "into_l1": 0.5004219099680817,
       "dur_acc": 0.5682787057096932,
       "dur_macro_f1": 0.3978523818363815,
+      "dur_tuned_macro_f1": null,
       "per_pair": {
         "German->English": 0.35887767550182986,
         "German->French": 0.1937814966245127,
@@ -552,6 +566,7 @@
       "into_l1": 0.25932311936548597,
       "dur_acc": null,
       "dur_macro_f1": null,
+      "dur_tuned_macro_f1": null,
       "per_pair": {
         "Arabic->English": 0.17468056489576325,
         "Cantonese->English": 0.244214883228074,
@@ -580,6 +595,7 @@
       "into_l1": 0.5472829965047228,
       "dur_acc": 0.6277939128704993,
       "dur_macro_f1": 0.4728564908904211,
+      "dur_tuned_macro_f1": null,
       "per_pair": {
         "Arabic->English": 0.38955403776617115,
         "Cantonese->English": 0.4167882243734253,

@@ -52,4 +52,4 @@ Two alternatives are stored and selectable in `kaggle/load_labels.ipynb`:
 ## Licences
 
 - **AnE-LID and AnE-NER** are released for academic use only.
-- **SwitchLingua is gated.** Derived labels stay in the private Hugging Face dataset `cristae/switchlingua-tagged-final` and are never committed to git.
+- **SwitchLingua is gated.** Derived labels stay in the private Hugging Face dataset `CodeSwitchGroup4/switchlingua-tagged-final` and are never committed to git.

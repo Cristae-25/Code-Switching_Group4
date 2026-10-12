@@ -29,9 +29,10 @@ import torch.nn as nn
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.anticipation import N_DUR  # noqa: E402
-from src.causal_model import check_causality, check_context_free  # noqa: E402
-from src.evaluation import format_report, full_report  # noqa: E402
-from src.metrics import prf  # noqa: E402
+from src.causal_model import (check_causality, check_context_free, duration_probs,  # noqa: E402
+                              ordinal_targets)
+from src.evaluation import format_duration, format_report, full_report  # noqa: E402
+from src.metrics import apply_class_offsets, prf, tune_class_offsets  # noqa: E402
 from src.models import build_model  # noqa: E402
 from src.streaming import (DEFAULT_PATHS, VOCAB_PATHS, build_subword_vocab,  # noqa: E402
                            build_vocab, make_loader)
@@ -145,8 +146,9 @@ def evaluate(model, loader, dev, max_batches=0):
         dm = b["dur_mask"]
         if dm.any():
             out["dtrue"].append(b["y_dur"][dm].numpy())
-            out["dpred"].append(dur.float().cpu()[dm].argmax(-1).numpy())
-            out["dprob"].append(torch.softmax(dur.float().cpu()[dm], -1).numpy())
+            probs = duration_probs(dur.float().cpu()[dm], getattr(model, "dur_ordinal", False))
+            out["dpred"].append(probs.argmax(-1).numpy())
+            out["dprob"].append(probs.numpy())
             # aligned with dtrue: dur_mask is a subset of sw_mask
             out["dpair"].append(b["report_pair"].unsqueeze(1).expand_as(dm)[dm].numpy())
             out["dlang"].append(b["cur_lang"][dm].numpy())
@@ -193,6 +195,16 @@ def score(res, tau):
     return rep
 
 
+DURATION_KEYS = ("duration", "duration_end_to_end", "duration_per_pair", "duration_per_direction")
+
+
+def tuned_duration(res, tau, offsets, val_macro_f1) -> dict:
+    """The duration report again, after ``offsets`` (fit on val) move the decision."""
+    rep = score(dict(res, dpred=apply_class_offsets(res["dprob"], offsets)), tau)
+    return dict(offsets=np.asarray(offsets).tolist(), val_macro_f1=float(val_macro_f1),
+                report={k: rep[k] for k in DURATION_KEYS if k in rep})
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", choices=["scratch", *PRETRAINED], default="scratch")
@@ -233,6 +245,8 @@ def main() -> None:
                     help="input: the language of the last finished word (pieces)")
     ap.add_argument("--predict-at", choices=["piece", "word_end"], default="piece",
                     help="word_end: train and score only at the last piece of each word")
+    ap.add_argument("--dur-head", choices=["softmax", "ordinal"], default="softmax",
+                    help="ordinal: cumulative cuts P(>Small), P(>Medium) instead of a 3-way softmax")
     ap.add_argument("--context", type=int, choices=[1], default=None,
                     help="pretrained: 1 = read the current piece only (no prefix); default the whole prefix")
     ap.add_argument("--names", choices=["script_words", "transparent", "script", "hybrid", "language"],
@@ -304,7 +318,7 @@ def main() -> None:
                   seed=args.seed if args.seed is not None else 0)
     print(f"flags: seed={args.seed} predict_at={args.predict_at} turn_sep={args.turn_sep} "
           f"prev_lang={args.prev_lang} dur_class_weights={args.dur_class_weights} "
-          f"context={args.context or 'prefix'}")
+          f"context={args.context or 'prefix'} dur_head={args.dur_head}")
     loader = lambda split, langs, workers=0: make_loader(  # noqa: E731
         args.path, vocab, split, args.batch_size, workers, languages=langs, **common)
     train_loader = loader("train", train_langs or None, args.workers)
@@ -328,6 +342,7 @@ def main() -> None:
         print("duration class counts (train):", counts.tolist(), "-> weights", np.round(dur_w, 3).tolist())
         dur_w = torch.tensor(dur_w, dtype=torch.float32, device=dev)
     ce = nn.CrossEntropyLoss(weight=dur_w, reduction="none")
+    ordinal = args.dur_head == "ordinal"
 
     step, t0, running = 0, time.time(), []
     model.train()
@@ -343,7 +358,13 @@ def main() -> None:
             loss = (bce(sw, b["y_sw"].to(dev).float()) * m).sum() / m.sum().clamp(min=1)
             dm = b["dur_mask"].to(dev)
             if dm.any():
-                dl = ce(dur.reshape(-1, N_DUR), b["y_dur"].to(dev).reshape(-1))
+                y_dur = b["y_dur"].to(dev).reshape(-1)
+                if ordinal:                  # one binary loss per cut, class-weighted like CE
+                    dl = bce(dur.reshape(-1, N_DUR - 1), ordinal_targets(y_dur)).sum(-1)
+                    if dur_w is not None:
+                        dl = dl * dur_w[y_dur]
+                else:
+                    dl = ce(dur.reshape(-1, N_DUR), y_dur)
                 loss = loss + args.dur_weight * ((dl * dm.reshape(-1)).sum() / dm.sum().clamp(min=1))
             opt.zero_grad(set_to_none=True)
             scaler.scale(loss).backward()
@@ -375,10 +396,19 @@ def main() -> None:
                                     "non-CJK word; comparable across tokenizers)"))
     payload = dict(model=args.model, unit=args.unit, **report, tau=tau, val_f1=vf1,
                    params=n_param, causality=chk, steps=step, args=vars(args))
+    if len(val["dtrue"]):                 # the duration decision, re-balanced on val
+        dur_off, dvf = tune_class_offsets(val["dprob"], val["dtrue"])
+        payload["duration_tuned"] = tuned_duration(test, tau, dur_off, dvf)
+        print("\n" + format_duration(payload["duration_tuned"]["report"],
+                                      f"TEST split, duration offsets tuned on val "
+                                      f"(small, medium, large) {np.round(dur_off, 2).tolist()}:"))
     if holdout:
-        zs = score(evaluate(model, loader("test", holdout), dev, args.eval_batches), tau)
+        zt = evaluate(model, loader("test", holdout), dev, args.eval_batches)
+        zs = score(zt, tau)
         print("\n" + format_report(zs, "ZERO-SHOT - language pairs never seen in training"))
         payload["zero_shot"] = dict(**zs, holdout=holdout)
+        if "duration_tuned" in payload and len(zt["dtrue"]):
+            payload["zero_shot"]["duration_tuned"] = tuned_duration(zt, tau, dur_off, dvf)
 
     os.makedirs(os.path.dirname(args.ckpt) or ".", exist_ok=True)
     torch.save(dict(state=model.state_dict(), args=vars(args), tau=tau,

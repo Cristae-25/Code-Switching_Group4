@@ -20,6 +20,7 @@ import torch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from src.anticipation import N_DUR  # noqa: E402
 from src.models import build_model  # noqa: E402
 from src.metrics import prf  # noqa: E402
 from src.streaming import (COLUMNS, DEFAULT_PATHS, VOCAB_PATHS,  # noqa: E402
@@ -54,7 +55,8 @@ def main() -> None:
     model = build_model(a, ck["vocab_size"], n_pairs=14,
                         use_pair=state.get("pair_emb.weight") is not None,
                         use_lang=state.get("lang_emb.weight") is not None,
-                        n_dur=state["head_dur.weight"].shape[0], pretrained=False)
+                        n_dur=(state["head_dur.weight"].shape[0] if "head_dur.weight" in state
+                               else N_DUR), pretrained=False)   # an ordinal head has no .weight
     model.load_state_dict(state)
     model.eval().to(args.device)
     tau = ck["tau"]

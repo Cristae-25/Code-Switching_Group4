@@ -30,6 +30,7 @@ from __future__ import annotations
 import torch.nn as nn
 
 from .anticipation import N_DUR
+from .causal_model import make_dur_head
 
 BACKBONES = {"xlmr": "xlm-roberta-base", "roberta": "roberta-base",
              "mbert": "bert-base-multilingual-cased"}
@@ -38,8 +39,9 @@ BACKBONES = {"xlmr": "xlm-roberta-base", "roberta": "roberta-base",
 class CausalPretrained(nn.Module):
     def __init__(self, name: str = "xlm-roberta-base", config=None, pretrained: bool = True,
                  n_dur: int = N_DUR, dropout: float = 0.1, use_lang: bool = False,
-                 context: int | None = None):
+                 context: int | None = None, dur_head: str = "softmax"):
         super().__init__()
+        self.dur_ordinal = dur_head == "ordinal"
         if context not in (None, 1):
             raise ValueError("context is None (the whole prefix) or 1 (the current piece only)")
         if context == 1 and use_lang:
@@ -68,7 +70,7 @@ class CausalPretrained(nn.Module):
             nn.init.zeros_(self.lang_emb.weight)
         self.drop = nn.Dropout(dropout)
         self.head_sw = nn.Linear(d, 1)
-        self.head_dur = nn.Linear(d, n_dur)
+        self.head_dur = make_dur_head(d, n_dur, dur_head)
 
     def forward(self, word_ids, lang_ids=None, pair_id=None):
         if self.context == 1:                    # [b, t] -> [b*t, 1]: one piece per sequence

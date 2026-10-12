@@ -83,6 +83,46 @@ def duration_scores(y_true, y_pred, n_classes: int = 3) -> dict:
     )
 
 
+def _macro_f1_fast(y_true, y_pred, n_classes: int) -> float:
+    conf = np.bincount(y_true * n_classes + y_pred, minlength=n_classes * n_classes)
+    conf = conf.reshape(n_classes, n_classes)
+    tp = np.diag(conf)
+    denom = conf.sum(0) + conf.sum(1)
+    return float(np.mean(np.where(denom > 0, 2 * tp / np.maximum(denom, 1), 0.0)))
+
+
+def apply_class_offsets(prob, offsets) -> np.ndarray:
+    """``argmax(log p + offsets)``: the duration decision with per-class biases."""
+    return (np.log(np.clip(np.asarray(prob, dtype=float), 1e-12, None))
+            + np.asarray(offsets)).argmax(-1)
+
+
+def tune_class_offsets(prob, y_true, span: float = 2.0, step: float = 0.1) -> tuple:
+    """Per-class log-offsets that maximise macro-F1, fit on a held-out split.
+
+    The argmax of a model trained on imbalanced classes leans toward the
+    majority; adding a bias per class moves the decision boundaries without
+    retraining. The first class is fixed at 0 (only differences matter). A grid
+    over the rest is refined once at a tenth of the step. Fit on VAL, apply to
+    test unchanged. Returns ``(offsets, val macro-F1)``.
+    """
+    logp = np.log(np.clip(np.asarray(prob, dtype=float), 1e-12, None))
+    y = np.asarray(y_true, dtype=np.int64)
+    k = logp.shape[1]
+    if len(y) == 0:
+        return np.zeros(k), 0.0
+    best = (_macro_f1_fast(y, logp.argmax(1), k), np.zeros(k))
+    for centre, half, st in ((np.zeros(k), span, step), (None, step, step / 10)):
+        c = best[1] if centre is None else centre
+        axes = [np.arange(c[i] - half, c[i] + half + st / 2, st) for i in range(1, k)]
+        for combo in np.array(np.meshgrid(*axes, indexing="ij")).reshape(k - 1, -1).T:
+            off = np.r_[0.0, combo]
+            f = _macro_f1_fast(y, (logp + off).argmax(1), k)
+            if f > best[0] + 1e-12:
+                best = (f, off)
+    return best[1], best[0]
+
+
 def end_to_end_duration(y_true, y_pred, fired, n_classes: int = 3) -> dict:
     """Duration at true switch points, counting a missed switch as a wrong class.
 

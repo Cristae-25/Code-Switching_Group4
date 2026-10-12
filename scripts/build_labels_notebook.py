@@ -49,7 +49,7 @@ Which model produced the underlying word labels, and how accurate each is, is in
 
 ## How to run
 
-1. **Access.** Your Hugging Face account needs access to `cristae/switchlingua-tagged-final` (ask Cristae) and, for sub-word labels only, to the gated [`Shelton1013/SwitchLingua_text`](https://huggingface.co/datasets/Shelton1013/SwitchLingua_text).
+1. **Access.** Your Hugging Face account needs access to `CodeSwitchGroup4/switchlingua-tagged-final` (ask Cristae to add you to the `CodeSwitchGroup4` org; a fine-grained token also needs that org under its permissions) and, for sub-word labels only, to the gated [`Shelton1013/SwitchLingua_text`](https://huggingface.co/datasets/Shelton1013/SwitchLingua_text).
 2. **Token.** On Kaggle, add a secret named `HF_TOKEN` (Add-ons → Secrets) holding a read token. Locally, put `HF_TOKEN=...` in `.env`.
 3. **Settings.** Turn Internet on. A CPU is enough.
 4. **Choose** in the Config cell below, then *Run All*. The output files appear in `/kaggle/working` (Output tab).
@@ -70,7 +70,7 @@ SPLITS = None            # None = all, or e.g. ["train"]   (row_id % 10: 0-7 tra
 LIMIT = None             # None = every row, or e.g. 200 rows per pair for a quick look
 EXPORT = "parquet"       # "parquet", "csv" or "both"
 
-LABELS_REPO = "cristae/switchlingua-tagged-final"
+LABELS_REPO = "CodeSwitchGroup4/switchlingua-tagged-final"
 """
 
 SETUP = """

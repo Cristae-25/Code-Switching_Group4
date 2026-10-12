@@ -12,7 +12,7 @@ How we work in this repo. Who owns what is in [`docs/TEAM_PLAN.md`](docs/TEAM_PL
    ```
    Always run things as `./.venv/bin/python …` from the repo root.
 2. **Access** (ask Cristae for the first; request the second yourself):
-   - **Our labels:** the private Hugging Face dataset `cristae/switchlingua-tagged-final`.
+   - **Our labels:** the private Hugging Face dataset `CodeSwitchGroup4/switchlingua-tagged-final`.
    - **SwitchLingua:** the gated original text, [`Shelton1013/SwitchLingua_text`](https://huggingface.co/datasets/Shelton1013/SwitchLingua_text). It is needed to rebuild sub-word labels and for the Kaggle notebook.
 3. **Token.** Create a Hugging Face **read** token. Put `HF_TOKEN=hf_...` in `.env` (gitignored), and add the same token as a Kaggle secret named `HF_TOKEN`.
 4. **Data.**

@@ -6,24 +6,24 @@ Every run is scored the same way (`src/evaluation.py`): the switch threshold is 
 
 **Shared F1** is scored only at the last piece of each non-CJK word, positions that every tokenizer (and the word model) has in common. It is the fair comparison between models with different tokenizers. It is empty for runs made before it existed.
 
-| Model | Switch F1 | Macro-F1 over pairs | Shared F1 (non-CJK words) | F1 into L2 | F1 into L1 | Duration acc | Duration macro-F1 |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| hazard, pooled (words) | 0.295 | 0.259 | 0.345 | 0.000 | 0.382 | 0.585 | 0.428 |
-| hazard, per pair (words) | 0.329 | 0.305 | 0.373 | 0.227 | 0.393 | 0.585 | 0.428 |
-| hazard, pooled (pieces) | 0.235 | 0.214 | 0.332 | 0.000 | 0.289 | 0.509 | 0.225 |
-| hazard, per pair (pieces) | 0.266 | 0.259 | 0.360 | 0.217 | 0.299 | 0.509 | 0.225 |
-| hazard, per pair (RoBERTa pieces) | 0.264 | 0.224 | 0.338 | 0.025 | 0.327 | 0.627 | 0.446 |
-| hazard, per pair (mBERT pieces) | 0.254 | 0.219 | 0.357 | 0.159 | 0.307 | 0.552 | 0.402 |
-| scratch (word) | 0.508 | 0.505 | 0.588 | 0.342 | 0.651 | 0.711 | 0.570 |
-| scratch (subword) | 0.451 | 0.451 | 0.546 | 0.354 | 0.557 | 0.637 | 0.482 |
-| xlmr (subword) | 0.646 | 0.676 |  | 0.536 | 0.759 | 0.678 | 0.575 |
-| xlmr (subword, trained on 10 pairs) | 0.634 | 0.656 |  | 0.502 | 0.764 | 0.674 | 0.574 |
-| xlmr (subword, trained on 10 pairs, held-out pairs) | 0.625 | 0.627 |  | 0.529 | 0.730 | 0.660 | 0.562 |
-| mbert (subword) | 0.634 | 0.662 | 0.719 | 0.512 | 0.759 | 0.713 | 0.576 |
-| scratch (subword, trained on 10 pairs) | 0.447 | 0.435 |  | 0.331 | 0.565 | 0.632 | 0.481 |
-| scratch (subword, trained on 10 pairs, held-out pairs) | 0.330 | 0.322 |  | 0.205 | 0.500 | 0.568 | 0.398 |
-| naive_l2 (6 script pairs, pieces) | 0.225 | 0.183 | 0.323 | 0.000 | 0.259 |  |  |
-| piece lookup (6 script pairs) | 0.427 | 0.450 | 0.567 | 0.253 | 0.547 | 0.628 | 0.473 |
+| Model | Switch F1 | Macro-F1 over pairs | Shared F1 (non-CJK words) | F1 into L2 | F1 into L1 | Duration acc | Duration macro-F1 | Duration macro-F1, val-tuned |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| hazard, pooled (words) | 0.295 | 0.259 | 0.345 | 0.000 | 0.382 | 0.585 | 0.428 |  |
+| hazard, per pair (words) | 0.329 | 0.305 | 0.373 | 0.227 | 0.393 | 0.585 | 0.428 |  |
+| hazard, pooled (pieces) | 0.235 | 0.214 | 0.332 | 0.000 | 0.289 | 0.509 | 0.225 |  |
+| hazard, per pair (pieces) | 0.266 | 0.259 | 0.360 | 0.217 | 0.299 | 0.509 | 0.225 |  |
+| hazard, per pair (RoBERTa pieces) | 0.264 | 0.224 | 0.338 | 0.025 | 0.327 | 0.627 | 0.446 |  |
+| hazard, per pair (mBERT pieces) | 0.254 | 0.219 | 0.357 | 0.159 | 0.307 | 0.552 | 0.402 |  |
+| scratch (word) | 0.508 | 0.505 | 0.588 | 0.342 | 0.651 | 0.711 | 0.570 |  |
+| scratch (subword) | 0.451 | 0.451 | 0.546 | 0.354 | 0.557 | 0.637 | 0.482 |  |
+| xlmr (subword) | 0.646 | 0.676 |  | 0.536 | 0.759 | 0.678 | 0.575 |  |
+| xlmr (subword, trained on 10 pairs) | 0.634 | 0.656 |  | 0.502 | 0.764 | 0.674 | 0.574 |  |
+| xlmr (subword, trained on 10 pairs, held-out pairs) | 0.625 | 0.627 |  | 0.529 | 0.730 | 0.660 | 0.562 |  |
+| mbert (subword) | 0.634 | 0.662 | 0.719 | 0.512 | 0.759 | 0.713 | 0.576 |  |
+| scratch (subword, trained on 10 pairs) | 0.447 | 0.435 |  | 0.331 | 0.565 | 0.632 | 0.481 |  |
+| scratch (subword, trained on 10 pairs, held-out pairs) | 0.330 | 0.322 |  | 0.205 | 0.500 | 0.568 | 0.398 |  |
+| naive_l2 (6 script pairs, pieces) | 0.225 | 0.183 | 0.323 | 0.000 | 0.259 |  |  |  |
+| piece lookup (6 script pairs) | 0.427 | 0.450 | 0.567 | 0.253 | 0.547 | 0.628 | 0.473 |  |
 
 ## Switch F1 by language pair
 

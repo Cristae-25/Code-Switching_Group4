@@ -30,7 +30,7 @@ Always run things as `./.venv/bin/python …` from the repo root. The scripts im
 **Access you need** (both are gated or private):
 
 1. **SwitchLingua.** Request access on its [Hugging Face page](https://huggingface.co/datasets/Shelton1013/SwitchLingua_text).
-2. **Our labels.** They live in the private dataset `cristae/switchlingua-tagged-final`; ask Cristae to add you.
+2. **Our labels.** They live in the private dataset `CodeSwitchGroup4/switchlingua-tagged-final`; ask Cristae to add you to the `CodeSwitchGroup4` org.
 
 Then create a Hugging Face token (read access is enough) and put it in `.env`. `.env` is gitignored, so never commit it:
 
@@ -40,7 +40,7 @@ HF_TOKEN=hf_...
 
 ## Get the labels
 
-The labels are ready-made: every token already has its switch and duration targets. They live in the private Hugging Face dataset `cristae/switchlingua-tagged-final` (never in git: the corpus is gated). With `HF_TOKEN` in `.env`:
+The labels are ready-made: every token already has its switch and duration targets. They live in the private Hugging Face dataset `CodeSwitchGroup4/switchlingua-tagged-final` (never in git: the corpus is gated). With `HF_TOKEN` in `.env`:
 
 ```bash
 ./.venv/bin/python scripts/download_labels.py          # -> data/final/token_labels_{word,subword}.parquet
