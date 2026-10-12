@@ -38,6 +38,8 @@ DEFAULT_SPECS = [
     "data/baseline_anticipation_subword_6pairs.json:naive_l2:naive_l2 (6 script pairs, pieces)",
     "data/baseline_anticipation_subword_6pairs.json:piece_lookup@tuned:piece lookup (6 script pairs)",
     "data/anticipation_xlmr_ctx1_6pairs.json",     # notebook: CONTEXT = 1, PAIRS = the 6 script pairs
+    "data/anticipation_xlmr_6pairs.json",          # notebook: PAIRS = the 6 script pairs
+    "data/anticipation_xlmr_durw_6pairs.json",     # ... plus DUR_WEIGHTS = "balanced"
 ]
 
 
@@ -51,7 +53,9 @@ def _summary(label: str, rep: dict) -> dict:
                 shared_per_pair={k: v["f1"] for k, v in sh["per_pair"].items()} if sh else {},
                 into_l2=d.get("into L2", {}).get("f1"), into_l1=d.get("into L1", {}).get("f1"),
                 dur_acc=dur.get("accuracy"), dur_macro_f1=dur.get("macro_f1"),
-                per_pair={k: v["f1"] for k, v in rep["per_pair"].items()})
+                per_pair={k: v["f1"] for k, v in rep["per_pair"].items()},
+                dur_per_pair={k: v["macro_f1"] for k, v in
+                              (rep.get("duration_per_pair") or {}).items()})
 
 
 def iter_reports(specs):
@@ -73,6 +77,8 @@ def iter_reports(specs):
         label = f"{data.get('model', 'scratch')} ({data.get('unit', 'word')})"
         if run_args.get("context") == 1:                 # reads piece t only, no prefix
             label = label[:-1] + ", current piece only)"
+        if run_args.get("dur_class_weights", "none") != "none":
+            label = label[:-1] + ", class-weighted duration)"
         trained_on = [x for x in run_args.get("train_langs", "").split(",") if x]
         if trained_on:                                   # a zero-shot run: say what it saw
             label = label[:-1] + f", trained on {len(trained_on)} pairs)"
@@ -133,6 +139,17 @@ def to_markdown(runs, table: pd.DataFrame) -> str:
                   "Switch F1 on the last piece of each non-CJK word (the same words for every model).", "",
                   "| Pair | " + " | ".join(st.columns) + " |", "|---|" + "---:|" * len(st.columns)]
         for pair, row in st.loc[st.mean(axis=1).sort_values(ascending=False).index].iterrows():
+            best = row.max()
+            lines.append(f"| {pair} | " + " | ".join(f"**{v:.3f}**" if v == best else _f(v)
+                                                     for v in row) + " |")
+    dur = [r for r in runs if r["dur_per_pair"]]
+    if dur:
+        dt = pd.DataFrame({r["label"]: r["dur_per_pair"] for r in dur})
+        lines += ["", "## Duration macro-F1 by language pair", "",
+                  "At true switch points whose class is certain. CJK runs count characters (or "
+                  "merged pieces), other scripts count words, so compare within a script.", "",
+                  "| Pair | " + " | ".join(dt.columns) + " |", "|---|" + "---:|" * len(dt.columns)]
+        for pair, row in dt.loc[dt.mean(axis=1).sort_values(ascending=False).index].iterrows():
             best = row.max()
             lines.append(f"| {pair} | " + " | ".join(f"**{v:.3f}**" if v == best else _f(v)
                                                      for v in row) + " |")

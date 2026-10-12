@@ -13,4 +13,5 @@ Every GPU (Kaggle) run, so nobody repeats someone else's run, and the team's 4 Ã
 | _next_ | _training lead_ | Kaggle T4 | `xlmr` | seed 0, 12k steps, no flags (gives shared F1 + predictions) | ~1.2 | | |
 | _next_ | _training lead_ | Kaggle T4 | `xlmr_durw_prev_wend` | seed 0, 12k steps, `DUR_WEIGHTS="balanced"`, `PREV_LANG=True`, `PREDICT_AT="word_end"` | ~1.2 | | |
 | _next_ | _training lead_ | Kaggle T4 | `xlmr_ctx1_6pairs` | seed 0, 12k steps, `CONTEXT = 1` (current piece only), `PAIRS` = Cantonese, Chinese, Japanese, Korean, Russian, Arabic | ~1.2 | | [design](results/2026-10-06_current_token_xlmr.md) |
-| _optional_ | _training lead_ | Kaggle T4 | `xlmr_6pairs` | as above with `CONTEXT = None`: the matched full-prefix comparison | ~1.2 | | |
+| _next_ | _training lead_ | Kaggle T4 | `xlmr_6pairs` | seed 0, 12k steps, `CONTEXT = None`, `PAIRS` = the 6 script pairs: the matched full-prefix comparison, with per-pair and end-to-end duration (the other 9 pairs are scored zero-shot) | ~1.5 | | [summary](results/2026-10-11_xlmr_6pairs_summary.md) |
+| _next_ | _training lead_ | Kaggle T4 | `xlmr_durw_6pairs` | as `xlmr_6pairs`, plus `DUR_WEIGHTS="balanced"` (targets Medium). Compare with `scripts/bootstrap_preds.py xlmr_6pairs xlmr_durw_6pairs` | ~1.5 | | |

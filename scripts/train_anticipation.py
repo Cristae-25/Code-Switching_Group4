@@ -130,8 +130,8 @@ def scored_positions(b):
 def evaluate(model, loader, dev, max_batches=0):
     """Logits and labels at every scored position, with pair and direction."""
     model.eval()
-    out = {k: [] for k in ("logit", "y", "pair", "lang", "dtrue", "dpred", "dprob", "shared",
-                           "row", "pos")}
+    out = {k: [] for k in ("logit", "y", "pair", "lang", "dtrue", "dpred", "dprob", "dpair",
+                           "dlang", "dlogit", "drow", "shared", "row", "pos")}
     for i, b in enumerate(loader):
         if max_batches and i >= max_batches:
             break
@@ -147,6 +147,11 @@ def evaluate(model, loader, dev, max_batches=0):
             out["dtrue"].append(b["y_dur"][dm].numpy())
             out["dpred"].append(dur.float().cpu()[dm].argmax(-1).numpy())
             out["dprob"].append(torch.softmax(dur.float().cpu()[dm], -1).numpy())
+            # aligned with dtrue: dur_mask is a subset of sw_mask
+            out["dpair"].append(b["report_pair"].unsqueeze(1).expand_as(dm)[dm].numpy())
+            out["dlang"].append(b["cur_lang"][dm].numpy())
+            out["dlogit"].append(sw.float().cpu()[dm].numpy())
+            out["drow"].append(b["row_id"].unsqueeze(1).expand_as(dm)[dm].numpy())
         out["shared"].append(b["shared_mask"][m].numpy())
         row, pos = scored_positions(b)                      # trace errors back to the text
         out["row"].append(row)
@@ -174,7 +179,14 @@ def score(res, tau):
     """The full report, plus ``shared``: the same report on the positions every
     model shares (the last piece of each non-CJK word), comparable across tokenizers."""
     pred = (1 / (1 + np.exp(-res["logit"])) >= tau).astype(int)
-    rep = full_report(res["y"], pred, res["pair"], res["lang"], res["dtrue"], res["dpred"])
+    # Duration side arrays are aligned with dtrue; older prediction files lack them.
+    def aligned(k):
+        return res[k] if k in res and len(res[k]) == len(res["dtrue"]) else None
+
+    dlogit = aligned("dlogit")
+    fired = None if dlogit is None else 1 / (1 + np.exp(-np.asarray(dlogit))) >= tau
+    rep = full_report(res["y"], pred, res["pair"], res["lang"], res["dtrue"], res["dpred"],
+                      dur_pairs=aligned("dpair"), dur_langs=aligned("dlang"), dur_fired=fired)
     sh = np.asarray(res.get("shared", np.zeros(len(pred), bool)), dtype=bool)
     if sh.any():
         rep["shared"] = full_report(res["y"][sh], pred[sh], res["pair"][sh], res["lang"][sh])

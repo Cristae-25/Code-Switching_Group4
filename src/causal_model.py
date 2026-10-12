@@ -109,6 +109,7 @@ def check_causality(model, vocab_size: int, seq_len: int = 32,
                 positions_tested=seq_len - 1)
 
 
+@torch.no_grad()
 def check_context_free(model, vocab_size: int, seq_len: int = 32,
                        device: str = "cpu", tol: float = 0.0) -> dict:
     """Verify that the prediction at ``t`` reads token ``t`` and nothing else.

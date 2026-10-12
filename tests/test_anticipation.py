@@ -474,6 +474,36 @@ def test_score_adds_the_shared_positions_report():
     assert rep["shared"]["overall"]["n"] == 2 and "duration" not in rep["shared"]
 
 
+def test_evaluate_keeps_duration_aligned_with_its_pair_and_direction():
+    import torch
+    from src.evaluation import PAIR_KEYS
+    mod = _train_script()
+    w = 4
+    sw_mask = torch.tensor([[True, True, True, False], [True, True, False, False]])
+    dur_mask = torch.tensor([[False, True, False, False], [True, False, False, False]])
+    batch = dict(word_ids=torch.ones(2, w, dtype=torch.long), lang_ids=torch.zeros(2, w, dtype=torch.long),
+                 pair_id=torch.zeros(2, dtype=torch.long), sw_mask=sw_mask, dur_mask=dur_mask,
+                 y_sw=torch.tensor([[0, 1, 0, 0], [1, 0, 0, 0]]),
+                 y_dur=torch.tensor([[0, 2, 0, 0], [1, 0, 0, 0]]),
+                 cur_lang=torch.tensor([[0, 0, 1, 2], [1, 1, 2, 2]]),
+                 report_pair=torch.tensor([3, 7]), shared_mask=torch.zeros(2, w, dtype=torch.bool),
+                 row_id=torch.tensor([10, 11]), start=torch.zeros(2, dtype=torch.long))
+
+    class Fixed(torch.nn.Module):          # switch logit = position index, so alignment shows
+        def forward(self, words, langs, pair):
+            sw = torch.arange(words.shape[1], dtype=torch.float).expand(words.shape[0], -1)
+            return sw, torch.zeros(*words.shape, 3)
+
+    res = mod.evaluate(Fixed(), [batch], torch.device("cpu"))
+    assert res["dtrue"].tolist() == [2, 1]
+    assert res["dpair"].tolist() == [3, 7] and res["dlang"].tolist() == [0, 1]
+    assert res["dlogit"].tolist() == [1.0, 0.0]
+    assert res["drow"].tolist() == [10, 11]
+    rep = mod.score(res, 0.6)               # fires at position 1 (p 0.73), not at 0 (p 0.5)
+    assert set(rep["duration_per_pair"]) == {PAIR_KEYS[3], PAIR_KEYS[7]}
+    assert rep["duration_end_to_end"]["switch_recall"] == 0.5
+
+
 def test_baseline_reports_include_the_shared_positions():
     mod = _baseline_script()
     y = np.array([1, 0, 1, 0]); yp = np.array([1, 1, 0, 0])

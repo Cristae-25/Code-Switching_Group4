@@ -83,6 +83,32 @@ def duration_scores(y_true, y_pred, n_classes: int = 3) -> dict:
     )
 
 
+def end_to_end_duration(y_true, y_pred, fired, n_classes: int = 3) -> dict:
+    """Duration at true switch points, counting a missed switch as a wrong class.
+
+    ``fired`` says whether the switch head predicted the switch at that point.
+    Accuracy is the fraction where the switch was predicted *and* the class is
+    right; per-class F1 treats a missed switch as a false negative for its true
+    class and a false positive for none. False alarms at non-switch positions
+    are not counted here; switch precision already measures them.
+    """
+    y_true = np.asarray(y_true, dtype=np.int64)
+    y_pred = np.asarray(y_pred, dtype=np.int64)
+    fired = np.asarray(fired, dtype=bool)
+    if len(y_true) == 0:
+        return dict(n=0, accuracy=0.0, macro_f1=0.0, per_class_f1=[0.0] * n_classes,
+                    switch_recall=0.0)
+    hit = fired & (y_pred == y_true)
+    f1 = []
+    for c in range(n_classes):
+        tp = int((hit & (y_true == c)).sum())
+        fp = int((fired & (y_pred == c) & (y_true != c)).sum())
+        fn = int(((y_true == c) & ~hit).sum())
+        f1.append(0.0 if tp == 0 else float(2 * tp / (2 * tp + fp + fn)))
+    return dict(n=int(len(y_true)), accuracy=float(hit.mean()), macro_f1=float(np.mean(f1)),
+                per_class_f1=f1, switch_recall=float(fired.mean()))
+
+
 def confusion_table(conf, labels) -> str:
     rows = [dict(true=lab, **{f"pred_{p}": f"{c:,}" for p, c in zip(labels, row)})
             for lab, row in zip(labels, conf)]

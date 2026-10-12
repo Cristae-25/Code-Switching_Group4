@@ -69,4 +69,17 @@ Switch F1 on the last piece of each non-CJK word (the same words for every model
 | Russian->English | 0.236 | 0.311 | 0.228 | 0.307 | 0.231 | 0.214 | 0.470 | 0.408 | **0.653** | 0.212 | 0.410 |
 | German->French | 0.198 | 0.280 | 0.190 | 0.272 | 0.000 | 0.267 | 0.433 | 0.403 | **0.673** |  |  |
 
+## Duration macro-F1 by language pair
+
+At true switch points whose class is certain. CJK runs count characters (or merged pieces), other scripts count words, so compare within a script.
+
+| Pair | piece lookup (6 script pairs) |
+|---|---:|
+| Cantonese->English | **0.479** |
+| Japanese->English | **0.464** |
+| Korean->English | **0.431** |
+| Chinese->English | **0.405** |
+| Arabic->English | **0.400** |
+| Russian->English | **0.396** |
+
 Spread between the easiest and hardest pair: hazard, pooled (words) 0.183, hazard, per pair (words) 0.217, hazard, pooled (pieces) 0.179, hazard, per pair (pieces) 0.154, hazard, per pair (RoBERTa pieces) 0.355, hazard, per pair (mBERT pieces) 0.166, scratch (word) 0.204, scratch (subword) 0.258, xlmr (subword) 0.260, xlmr (subword, trained on 10 pairs) 0.192, xlmr (subword, trained on 10 pairs, held-out pairs) 0.325, mbert (subword) 0.263, scratch (subword, trained on 10 pairs) 0.121, scratch (subword, trained on 10 pairs, held-out pairs) 0.178, naive_l2 (6 script pairs, pieces) 0.089, piece lookup (6 script pairs) 0.220.

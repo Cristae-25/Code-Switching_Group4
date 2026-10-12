@@ -198,6 +198,17 @@ for f in (f"data/anticipation_{TAG}.json", f"data/anticipation_{TAG}_zeroshot.js
               + ", ".join(f"{k} {v['f1']:.3f}" for k, v in z["per_pair"].items()))
     display(pd.DataFrame({k: {"F1": v["f1"], "P": v["precision"], "R": v["recall"], "n": v["n"]}
                           for k, v in r["per_pair"].items()}).T.sort_values("F1", ascending=False).round(3))
+    if "duration_end_to_end" in r:
+        e = r["duration_end_to_end"]
+        print(f"  duration end to end (switch predicted AND class right): accuracy "
+              f"{e['accuracy']:.3f} | macro-F1 {e['macro_f1']:.3f}")
+    if "duration_per_pair" in r:
+        display(pd.DataFrame({k: {"n": v["n"], "acc": v["accuracy"], "macro-F1": v["macro_f1"],
+                                  "F1 small": v["per_class_f1"][0], "F1 medium": v["per_class_f1"][1],
+                                  "F1 large": v["per_class_f1"][2],
+                                  "e2e acc": v.get("end_to_end", {}).get("accuracy")}
+                              for k, v in r["duration_per_pair"].items()}).T
+                .sort_values("macro-F1", ascending=False).round(3))
 """
 
 CLEANUP = """

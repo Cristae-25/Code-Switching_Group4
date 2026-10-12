@@ -46,7 +46,7 @@ from src.anticipation import L2, NONE, N_DUR, DUR_LABELS  # noqa: E402
 from src.metrics import (by_group, confusion_table, duration_scores, fmt_table,  # noqa: E402
                          macro_f1, prf, wilson)
 from src.streaming import COLUMNS, DEFAULT_PATHS, example_for, iter_rows  # noqa: E402
-from src.evaluation import PAIR_KEYS, format_report, full_report, pair_key  # noqa: E402
+from src.evaluation import PAIR_KEYS, duration_by_pair, format_report, full_report, pair_key  # noqa: E402
 
 RUNPOS_CAP = 10          # run-position feature is capped; the tail is flat
 
@@ -298,13 +298,27 @@ def main() -> None:
     target_lang = 1 - test["cur_lang"][m]
     d_true = test["y_dur"][m]
     d_pred = dur_mode[target_lang]
+    d_pair = test["pair"][m]
     ds = duration_scores(d_true, d_pred)
+    ds_pair = duration_by_pair(d_true, d_pred, d_pair)
     for name in ("hazard@tuned", "hazard_pair@tuned"):   # the training-free duration baseline
         detail[name]["duration"] = ds
+        detail[name]["duration_per_pair"] = ds_pair
+    # The same mode, fit on each pair's own training switches: the per-pair bar.
+    d_pred_pp = d_pred.copy()
+    for p in np.unique(d_pair):
+        tr = {k: train[k][train["pair"] == p] for k in ("cur_lang", "y_sw", "dur_ok", "y_dur")}
+        sel = d_pair == p
+        d_pred_pp[sel] = fit_duration(tr)[target_lang[sel]]
+    detail["hazard_pair@tuned"]["duration_mode_per_pair"] = dict(
+        overall=duration_scores(d_true, d_pred_pp),
+        per_pair=duration_by_pair(d_true, d_pred_pp, d_pair))
     if lookup is not None:
         dur_lk = fit_piece_duration(train, dur_mode)
-        detail["piece_lookup@tuned"]["duration"] = duration_scores(
-            d_true, dur_lk(test["piece"][m], test["cur_lang"][m]))
+        d_pred_lk = dur_lk(test["piece"][m], test["cur_lang"][m])
+        detail["piece_lookup@tuned"]["duration"] = duration_scores(d_true, d_pred_lk)
+        detail["piece_lookup@tuned"]["duration_per_pair"] = duration_by_pair(
+            d_true, d_pred_lk, d_pair)
         dl = detail["piece_lookup@tuned"]["duration"]
         print(f"\nDuration, piece lookup: 3-class accuracy {dl['accuracy']:.3f} | "
               f"macro-F1 {dl['macro_f1']:.3f}")
@@ -325,6 +339,18 @@ def main() -> None:
         row.update({lab: f"{h:.3f}" for lab, h in zip(DUR_LABELS, hist)})
         dur_rows.append(row)
     print(fmt_table(dur_rows, ["target", "n", "mode", "acc"] + DUR_LABELS))
+    pp = detail["hazard_pair@tuned"]["duration_mode_per_pair"]["per_pair"]
+    lk = detail.get("piece_lookup@tuned", {}).get("duration_per_pair", {})
+    rows = [dict(pair=k, n=f"{d['n']:,}", mode_pooled_mF1=f"{ds_pair[k]['macro_f1']:.3f}",
+                 mode_pair_acc=f"{d['accuracy']:.3f}", mode_pair_mF1=f"{d['macro_f1']:.3f}",
+                 lookup_acc=f"{lk[k]['accuracy']:.3f}" if k in lk else "",
+                 lookup_mF1=f"{lk[k]['macro_f1']:.3f}" if k in lk else "",
+                 **{lab: f"{h:.3f}" for lab, h in zip(
+                     DUR_LABELS, np.array(d["confusion"]).sum(1) / max(d["n"], 1))})
+            for k, d in sorted(pp.items())]
+    print(fmt_table(rows, ["pair", "n", "mode_pooled_mF1", "mode_pair_acc", "mode_pair_mF1",
+                           "lookup_acc", "lookup_mF1"] + DUR_LABELS,
+                    "\nDuration by pair (training-free; class shares are the truth):"))
 
     detail["_meta"] = dict(
         train_positions=int(len(train["y_sw"])),
