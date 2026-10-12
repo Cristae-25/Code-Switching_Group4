@@ -93,8 +93,9 @@ The model reads a conversation one sub-word piece at a time, as an XLM-R tokeniz
 
 ## Compared with no training
 
-Simple baselines that need no model training, scored on the same test positions. The count-based ones fit their tables on the train split.
+Baselines that need no model training, scored on the same test positions. The count-based ones fit their tables on the train split.
 
+- **Untrained XLM-R** (`xlmr_untrained_6pairs`, `kaggle/untrained_xlmr.ipynb`): pretrained XLM-R exactly as downloaded, with randomly initialised switch and duration heads and 0 training steps. Only the switch threshold and the 3 duration offsets are fit on val. This is the starting point of fine-tuning.
 - **Always switch:** predict a switch at every piece.
 - **Naive (current language):** predict a switch whenever the current piece is English, i.e. "English stretches end". One bit of context.
 - **Run-length hazard:** P(switch | current language, how long the current stretch has run, the pair), with a val-tuned threshold. Duration: the most common class for that pair and direction.
@@ -102,34 +103,53 @@ Simple baselines that need no model training, scored on the same test positions.
 
 **Switch F1:**
 
-| Pair | Always switch | Naive | Run-length hazard | Piece lookup | **XLM-R** | XLM-R − lookup |
-|---|---:|---:|---:|---:|---:|---:|
-| Korean | 0.173 | 0.177 | 0.265 | 0.610 | **0.813** | +0.203 |
-| Japanese | 0.161 | 0.156 | 0.244 | 0.495 | **0.741** | +0.246 |
-| Chinese | 0.175 | 0.161 | 0.242 | 0.399 | **0.702** | +0.303 |
-| Arabic | 0.174 | 0.175 | 0.246 | 0.390 | **0.669** | +0.279 |
-| Russian | 0.172 | 0.183 | 0.245 | 0.391 | **0.666** | +0.275 |
-| Cantonese | 0.180 | 0.244 | 0.251 | 0.417 | **0.625** | +0.208 |
-| **All 6, pooled** | 0.178 | 0.225 | 0.251 | 0.427 | **0.645** | +0.218 |
-| **Average over pairs** | 0.173 | 0.183 | 0.249 | 0.450 | **0.703** | +0.253 |
+| Pair | Untrained XLM-R | Always switch | Naive | Run-length hazard | Piece lookup | **Fine-tuned XLM-R** | Fine-tuned − untrained | Fine-tuned − lookup |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Korean | 0.128 | 0.173 | 0.177 | 0.265 | 0.610 | **0.813** | +0.685 | +0.203 |
+| Japanese | 0.149 | 0.161 | 0.156 | 0.244 | 0.495 | **0.741** | +0.592 | +0.246 |
+| Chinese | 0.136 | 0.175 | 0.161 | 0.242 | 0.399 | **0.702** | +0.566 | +0.303 |
+| Arabic | 0.134 | 0.174 | 0.175 | 0.246 | 0.390 | **0.669** | +0.535 | +0.279 |
+| Russian | 0.137 | 0.172 | 0.183 | 0.245 | 0.391 | **0.666** | +0.529 | +0.275 |
+| Cantonese | 0.151 | 0.180 | 0.244 | 0.251 | 0.417 | **0.625** | +0.474 | +0.208 |
+| **All 6, pooled** | 0.148 | 0.178 | 0.225 | 0.251 | 0.427 | **0.645** | +0.497 | +0.218 |
+| **Average over pairs** | 0.139 | 0.173 | 0.183 | 0.249 | 0.450 | **0.703** | +0.564 | +0.253 |
 
 **Duration macro-F1** (at true switch points; XLM-R val-tuned):
 
-| Pair | Most common class | Piece lookup | **XLM-R** | XLM-R − lookup |
-|---|---:|---:|---:|---:|
-| Korean | 0.263 | 0.431 | **0.597** | +0.166 |
-| Japanese | 0.271 | 0.464 | **0.623** | +0.159 |
-| Chinese | 0.261 | 0.405 | **0.607** | +0.202 |
-| Arabic | 0.254 | 0.400 | **0.596** | +0.196 |
-| Russian | 0.254 | 0.396 | **0.593** | +0.197 |
-| Cantonese | 0.388 | 0.479 | **0.598** | +0.119 |
-| **All 6, pooled** | 0.390 | 0.473 | **0.602** | +0.129 |
+| Pair | Untrained XLM-R | Most common class | Piece lookup | **Fine-tuned XLM-R** | Fine-tuned − untrained | Fine-tuned − lookup |
+|---|---:|---:|---:|---:|---:|---:|
+| Korean | 0.288 | 0.263 | 0.431 | **0.597** | +0.309 | +0.166 |
+| Japanese | 0.286 | 0.271 | 0.464 | **0.623** | +0.337 | +0.159 |
+| Chinese | 0.339 | 0.261 | 0.405 | **0.607** | +0.268 | +0.202 |
+| Arabic | 0.329 | 0.254 | 0.400 | **0.596** | +0.267 | +0.196 |
+| Russian | 0.318 | 0.254 | 0.396 | **0.593** | +0.275 | +0.197 |
+| Cantonese | 0.315 | 0.388 | 0.479 | **0.598** | +0.283 | +0.119 |
+| **All 6, pooled** | 0.315 | 0.390 | 0.473 | **0.602** | +0.287 | +0.129 |
+
+**Untrained XLM-R in detail** (test split; the same 1,344,905 positions and 125,675 duration points as the fine-tuned run, so every comparison is paired):
+
+| | Untrained XLM-R | Fine-tuned XLM-R |
+|---|---:|---:|
+| Switch F1 (P / R), all 6 pooled | 0.148 (0.089 / 0.454) | 0.645 (0.657 / 0.634) |
+| Switch accuracy | 0.491 | 0.932 |
+| Into English / back into L1 F1 | 0.131 / 0.183 | 0.499 / 0.782 |
+| Duration accuracy / macro-F1 (val-tuned) | 0.355 / 0.315 | 0.663 / 0.602 |
+| Duration F1 Small / Medium / Large | 0.243 / 0.226 / 0.476 | 0.599 / 0.406 / 0.802 |
+| Duration within one class | 0.739 | 0.937 |
+| End to end (switch predicted *and* class right) | 0.164 | 0.445 |
+| 9 Latin-script pairs, zero-shot switch F1 | 0.193 | 0.514 |
+
+- **It is at chance, as expected.** A random head has nothing to read the pretrained features with. Precision 0.089 is just under the 0.098 switch base rate, so its "switch" calls are no better than random picks. The val-tuned threshold (0.448) then flags about half of all positions to reach 45% recall, which is why accuracy falls to 0.49.
+- **It scores below even "always switch"** (0.148 vs 0.178): flagging half the positions at random gets fewer true switches than flagging all of them, at a similar precision.
+- **Duration is near chance too.** Whatever the true class, it predicts about 27% Small, 27% Medium and 46% Large: the prediction ignores the answer. Guessing uniformly at random would give macro-F1 about 0.32; it scores 0.315.
+
 
 **How much did fine-tuning help?**
 - **Switch: from 0.25 to 0.70 average F1 against the run-length baseline, and +0.25 over the piece lookup.** The lookup shows how much a single piece gives away (Korean particles make it 0.610 on its own); everything XLM-R adds on top comes from reading the context before it. The gain is largest on Chinese, Arabic and Russian (+0.28 to +0.30), where the current piece says least.
 - **Duration: +0.12 to +0.20 macro-F1 over the piece lookup.** The baselines barely predict Medium (lookup Medium F1 0.11 pooled; the most-common-class baseline never predicts it). XLM-R reaches 0.41.
 - **Accuracy would hide all of this:** always predicting "no switch" scores about 0.90 accuracy and F1 0.
-- **We have no "XLM-R without fine-tuning" number.** The pretrained XLM-R has no switch or duration head, so before fine-tuning its predictions would be random. The baselines above are the meaningful no-training comparison.
+- **From the untrained starting point, fine-tuning adds +0.56 average switch F1 (0.139 → 0.703) and +0.29 duration macro-F1 (0.315 → 0.602).** That is the whole gain of training, but the untrained model is a floor, not a fair bar: it is at chance by construction, below even the trivial baselines. The bar a trained model has to clear is the piece lookup.
+- **Still to come: the linear probe** (`xlmr_probe_6pairs`, same notebook): XLM-R frozen, only the two heads trained. It will split the gain into what pretrained XLM-R already knows (probe − untrained) and what adapting the model itself adds (fine-tuned − probe).
 
 ## Per-pair detail
 
@@ -254,7 +274,7 @@ Each pair has two confusion matrices: switch on all test positions, and duration
 
 ## Takeaways
 
-- **Fine-tuning earns its keep.** Average switch F1 goes from 0.450 for the best no-training baseline (piece lookup) to 0.703, and duration macro-F1 from 0.473 to 0.602. The gain is the context: the lookup already knows everything the current piece gives away.
+- **Fine-tuning earns its keep.** Untrained, XLM-R is at chance (average switch F1 0.139, duration macro-F1 0.315). Fine-tuned, it reaches 0.703 and 0.602, well past the best no-training baseline (piece lookup, 0.450 and 0.473). The gain over the lookup is the context: the lookup already knows everything the current piece gives away.
 - **Switching into English is the weak direction** on 5 of 6 pairs (average over pairs 0.634 vs 0.775 back into L1). The gap ranges from −0.06 (Japanese) to −0.34 (Cantonese), and Korean is the exception (+0.02). This is where improvements matter most.
 - **Switch F1 ranges from 0.625 (Cantonese) to 0.813 (Korean).** Korean particles attach directly to English words, so a switch is easy to anticipate. Cantonese switches mid-clause, rarely at punctuation, and is half the test data.
 - **Duration: Large is easy (F1 0.78–0.89), Medium is hard (0.27–0.41).** Medium is mostly confused with its neighbours, and 91–95% of predictions are within one class. Medium is weakest on Korean and Japanese, where only 12.5% and 13.5% of switches are Medium.
