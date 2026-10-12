@@ -48,7 +48,11 @@ The model reads a conversation one sub-word piece at a time, as an XLM-R tokeniz
 
 Each pair has two confusion matrices: switch on all test positions, and duration (Small / Medium / Large) at true switch points. Precision and recall in the duration table are per class.
 
+**Reading the figures:** rows are the actual class, columns the prediction. Each cell shows its count and its share of the row, so the diagonal is the recall of each class. Colour encodes that share, not the raw count, on one 0–100% scale shared by every panel. Raw counts would make a useless colour scale, because "no switch, predicted no switch" is about 50× every other cell. The figures come from `scripts/plot_confusion.py data/anticipation_xlmr_6pairs.json --out docs/figures/team_meeting1`.
+
 ### Korean → English
+
+![Korean → English confusion matrices](figures/team_meeting1/korean.png)
 
 **Switch** (F1 0.813, precision 0.790, recall 0.837, accuracy 0.964):
 
@@ -67,6 +71,8 @@ Each pair has two confusion matrices: switch on all test positions, and duration
 
 ### Japanese → English
 
+![Japanese → English confusion matrices](figures/team_meeting1/japanese.png)
+
 **Switch** (F1 0.741, precision 0.713, recall 0.771, accuracy 0.953):
 
 | | Predicted switch | Predicted no switch |
@@ -83,6 +89,8 @@ Each pair has two confusion matrices: switch on all test positions, and duration
 | **Large (7+)** | 140 | 217 | 3,318 | 0.872 | 0.903 | 0.887 |
 
 ### Chinese → English
+
+![Chinese → English confusion matrices](figures/team_meeting1/chinese.png)
 
 **Switch** (F1 0.702, precision 0.658, recall 0.752, accuracy 0.939):
 
@@ -101,6 +109,8 @@ Each pair has two confusion matrices: switch on all test positions, and duration
 
 ### Arabic → English
 
+![Arabic → English confusion matrices](figures/team_meeting1/arabic.png)
+
 **Switch** (F1 0.669, precision 0.647, recall 0.692, accuracy 0.934):
 
 | | Predicted switch | Predicted no switch |
@@ -118,6 +128,8 @@ Each pair has two confusion matrices: switch on all test positions, and duration
 
 ### Russian → English
 
+![Russian → English confusion matrices](figures/team_meeting1/russian.png)
+
 **Switch** (F1 0.666, precision 0.656, recall 0.675, accuracy 0.936):
 
 | | Predicted switch | Predicted no switch |
@@ -134,6 +146,8 @@ Each pair has two confusion matrices: switch on all test positions, and duration
 | **Large (7+)** | 187 | 259 | 2,248 | 0.836 | 0.834 | 0.835 |
 
 ### Cantonese → English
+
+![Cantonese → English confusion matrices](figures/team_meeting1/cantonese.png)
 
 **Switch** (F1 0.625, precision 0.647, recall 0.605, accuracy 0.928):
 
