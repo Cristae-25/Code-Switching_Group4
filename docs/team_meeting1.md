@@ -29,6 +29,24 @@ The model reads a conversation one sub-word piece at a time, as an XLM-R tokeniz
 
 **Accuracy is not the headline number.** About 90% of positions are "no switch", so always predicting "no switch" already scores about 0.90. F1, precision and recall on the switch class are the measures that matter.
 
+**Switch direction.** A switch either goes *into English* (the current piece is in the first language) or goes *back into the first language* (the current piece is English). Going back is easier on 5 of the 6 pairs: once an English stretch has run a few pieces, its end is predictable. Going into English means anticipating from content alone, and that is the core research question.
+
+| Pair | Into English: F1 (P / R) | Back into L1: F1 (P / R) | Gap |
+|---|---|---|---:|
+| Korean | **0.822** (0.841 / 0.804) | 0.803 (0.737 / 0.882) | +0.019 |
+| Japanese | 0.712 (0.713 / 0.711) | 0.775 (0.713 / 0.849) | −0.063 |
+| Chinese | 0.646 (0.625 / 0.670) | 0.767 (0.694 / 0.858) | −0.121 |
+| Russian | 0.594 (0.606 / 0.582) | 0.754 (0.714 / 0.798) | −0.160 |
+| Arabic | 0.586 (0.598 / 0.573) | 0.768 (0.698 / 0.854) | −0.182 |
+| Cantonese | **0.444** (0.538 / 0.378) | 0.784 (0.719 / 0.862) | −0.340 |
+| **All 6, pooled** | **0.499** (0.576 / 0.440) | **0.782** (0.717 / 0.860) | −0.283 |
+| Average over pairs | 0.634 | 0.775 | −0.141 |
+
+- **Read the pooled row with care.** Cantonese accounts for 55,791 of the 70,770 switches into English, so the pooled 0.499 mostly reflects Cantonese. The average over pairs (0.634) is fairer to the other five.
+- **Recall is what drops.** Going back into L1, the model catches 80–88% of switches. Going into English it catches 38–80%: the model hesitates rather than raising false alarms.
+- **Korean is the exception.** Korean particles attach straight onto English words, so the piece itself often announces the coming switch.
+- **Cantonese is the main problem.** It catches only 38% of its switches into English, and it is half the test data.
+
 **Duration prediction** (all 6 pairs: accuracy 0.663, macro-F1 0.602; n = 125,675 true switch points):
 
 | Pair | Switch points | Accuracy | Macro-F1 | Within one class |
@@ -167,6 +185,7 @@ Each pair has two confusion matrices: switch on all test positions, and duration
 
 ## Takeaways
 
+- **Switching into English is the weak direction** on 5 of 6 pairs (average over pairs 0.634 vs 0.775 back into L1). The gap ranges from −0.06 (Japanese) to −0.34 (Cantonese), and Korean is the exception (+0.02). This is where improvements matter most.
 - **Switch F1 ranges from 0.625 (Cantonese) to 0.813 (Korean).** Korean particles attach directly to English words, so a switch is easy to anticipate. Cantonese switches mid-clause, rarely at punctuation, and is half the test data.
 - **Duration: Large is easy (F1 0.78–0.89), Medium is hard (0.27–0.41).** Medium is mostly confused with its neighbours, and 91–95% of predictions are within one class. Medium is weakest on Korean and Japanese, where only 12.5% and 13.5% of switches are Medium.
 - **Class-weighted duration training changed neither the switch scores nor, after val tuning, the duration scores** (see the full record). We use the plain model plus tuning.

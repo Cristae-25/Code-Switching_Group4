@@ -32,7 +32,7 @@
 | **Pooled** | **0.645** (0.657 / 0.634) | 0.645 | +0.000 [−0.001, +0.001] | — |
 | **Macro over 6** | **0.703** | 0.703 | | 0.698 |
 
-- **By direction** (both runs): into L2 0.499, back into L1 0.782.
+- **By direction** (both runs): into L2 (English) 0.499, back into L1 0.782, pooled. Cantonese is 55,791 of the 70,770 into-L2 switches, so the pooled figure is mostly Cantonese. Per pair, into L2 / into L1: Korean 0.822 / 0.803, Japanese 0.712 / 0.775, Chinese 0.646 / 0.767, Russian 0.594 / 0.754, Arabic 0.586 / 0.768, Cantonese 0.444 / 0.784. Averaged over pairs that is 0.634 vs 0.775. Recall is what drops into L2 (0.38–0.80 vs 0.80–0.88).
 - **Weighting has no effect on switch prediction.** The difference is +0.000 pooled, and every per-pair interval contains 0. That is expected: the duration loss is weighted 0.3 and only applies at switch points, so it barely moves the shared encoder.
 - **Training on only these 6 pairs is about the same as training on all 15**, at +0.003 to +0.007 per pair (macro 0.703 vs 0.698). That is within the earlier run-to-run spread (±0.004), so the other 9 pairs neither help nor hurt these 6.
 - **The 9 held-out pairs** (the Latin-script pairs, including German→French) reach F1 0.514 (macro 0.520) with no training on them, against 0.659 (macro 0.662) for the all-pairs model that trained on them. A model trained only on non-Latin scripts keeps about 78% of its switch F1 on Latin-script text.
