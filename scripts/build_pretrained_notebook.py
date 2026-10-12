@@ -20,7 +20,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "kaggle", "train_pretrained.ipynb")
 MODULES = ["__init__", "routing", "tokenizer", "dict_tagger", "unicode_tagger", "dispatch",
            "segments", "anticipation", "subword", "token_labels", "metrics", "evaluation",
-           "streaming", "causal_model", "xlmr_model", "models"]
+           "streaming", "causal_model", "xlmr_model", "models", "training"]
 SCRIPTS = ["train_anticipation"]
 
 
@@ -113,6 +113,8 @@ if not TOKEN:
         TOKEN = UserSecretsClient().get_secret("HF_TOKEN")
     except Exception:
         pass
+if TOKEN:
+    os.environ["HF_TOKEN"] = TOKEN       # so every Hub download is authenticated, the tokenizer's too
 print("working dir:", WORK, "| HF token:", "found" if TOKEN else "MISSING - add the HF_TOKEN secret")
 """
 
