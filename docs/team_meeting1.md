@@ -5,7 +5,7 @@ Results of XLM-R on the six language pairs whose scripts don't overlap with Engl
 **Run:** `xlmr_6pairs`, Kaggle T4, 2026-10-12.
 - **Model:** XLM-R base (277 M parameters) with a causal mask.
 - **Training:** 12,000 steps, seed 0, on these 6 pairs only.
-- **Data split:** train on 80% of conversations, tune on 10% (val), report on the other 10% (test), scored once.
+- **Data split:** one model trained on the 6 pairs together. Within each pair, 80% of conversations are for training, 10% for tuning (val) and 10% for the reported test scores, scored once per pair.
 - **Full record:** [`results/2026-10-12_xlmr_6pairs_duration.md`](results/2026-10-12_xlmr_6pairs_duration.md), with the bootstrap intervals and the class-weighted comparison run.
 
 ## How the switch and duration labels were made
@@ -32,9 +32,28 @@ At 個 the model must predict that English comes next and lasts 3 pieces (Medium
 
 ## What we trained on and what we evaluated on
 
-- **Trained on the 6 pairs only.** Starting from pretrained XLM-R base, we fine-tuned it on the train split (80% of conversations, chosen by `row_id % 10`) of Cantonese, Chinese, Japanese, Korean, Russian and Arabic → English. The other 9 pairs (the Latin-script ones) were not used in training at all.
-- **Evaluated on the test split of the same 6 pairs**, on conversations the model never saw. Every number in this document is from those test conversations. The switch threshold and the duration offsets were picked on the val split.
-- **Also scored the 9 held-out Latin-script pairs, zero-shot,** as a transfer check: F1 0.514 (average over pairs 0.520, from 0.394 for German→French to 0.585 for Vietnamese→English). An earlier model trained on all 15 pairs scored 0.659 on them, so the 6-pair model keeps about 78% without ever seeing a Latin-script switch.
+**One model for all 6 pairs, scored on each pair separately.** We did *not* train one model per language. A single XLM-R was fine-tuned on the 6 pairs pooled together, then that same model was scored on each pair's own test conversations. Every per-pair number in this document comes from that one model.
+
+**The split is 80 / 10 / 10 within every pair.** Each conversation goes to one split by its `row_id` (`row_id % 10`: 0–7 train, 8 val, 9 test). It is assigned by conversation, never by token, so no conversation is split across train and test. Because the rule is the same for every row, each pair's test set is 10% of that pair's own conversations:
+
+| Pair | Conversations | Train (80%) | Val (10%) | Test (10%) | Test positions scored |
+|---|---:|---:|---:|---:|---:|
+| Cantonese | 119,248 | 95,398 | 11,925 | 11,925 | 1,061,851 |
+| Arabic | 8,548 | 6,840 | 854 | 854 | 51,395 |
+| Chinese | 8,458 | 6,766 | 846 | 846 | 62,016 |
+| Japanese | 8,385 | 6,708 | 839 | 838 | 64,510 |
+| Korean | 8,266 | 6,613 | 826 | 827 | 55,454 |
+| Russian | 8,017 | 6,413 | 802 | 802 | 49,679 |
+| **All 6** | **160,922** | **128,738** | **16,092** | **16,092** | **1,344,905** |
+
+- **Train (80%):** the only data the model learns from. 12,000 steps of 16 windows is about 1.5 passes over these conversations. Cantonese is 74% of the training conversations, because SwitchLingua has far more Cantonese than any other pair; the training batches are not rebalanced.
+- **Val (10%):** never trained on. It sets the decision rules only: the switch threshold (one value, 0.377, shared by all pairs) and the 3 duration offsets.
+- **Test (10%):** never trained on and never used for any choice. It is scored once, at the end, and each pair is reported on its own slice. The "all 6, pooled" rows weight every test position equally, so they are dominated by Cantonese. The "average over pairs" rows weight each pair equally.
+
+**What the model is not told.** The input is the text pieces only: no language tags, and no indication of which pair a conversation belongs to. The model has to work out the pair from the text itself.
+
+**Other checks:**
+- **The 9 held-out Latin-script pairs, scored zero-shot,** as a transfer check (their own test 10%): F1 0.514 (average over pairs 0.520, from 0.394 for German→French to 0.585 for Vietnamese→English). An earlier model trained on all 15 pairs scored 0.659 on them, so the 6-pair model keeps about 78% without ever seeing a Latin-script switch.
 - **Training on all 15 pairs instead doesn't change these 6.** The earlier all-15-pairs model scored average F1 0.698 on these 6 pairs, against 0.703 here, within run-to-run noise.
 
 ## How the model makes its predictions
@@ -279,3 +298,21 @@ Each pair has two confusion matrices: switch on all test positions, and duration
 - **Switch F1 ranges from 0.625 (Cantonese) to 0.813 (Korean).** Korean particles attach directly to English words, so a switch is easy to anticipate. Cantonese switches mid-clause, rarely at punctuation, and is half the test data.
 - **Duration: Large is easy (F1 0.78–0.89), Medium is hard (0.27–0.41).** Medium is mostly confused with its neighbours, and 91–95% of predictions are within one class. Medium is weakest on Korean and Japanese, where only 12.5% and 13.5% of switches are Medium.
 - **Class-weighted duration training changed neither the switch scores nor, after val tuning, the duration scores** (see the full record). We use the plain model plus tuning.
+
+## Next steps: improving XLM-R beyond more training
+
+**Convergence.** The training loss is still falling slowly (0.392 at step 6,000, 0.373 at 12,000), and part of the late drop is the learning-rate decay at the end of the schedule. 12,000 steps is about 1.5 passes over the training conversations. More steps will likely help a little, but the ideas below target other limits.
+
+Ranked by expected gain per GPU hour:
+
+1. **Run the queued input flags:** the previous word's language as input, and predicting at word ends only. In the local ablations these were the only changes that improved both switch F1 (+0.023) and duration. Word-end prediction also stops the model scoring mid-word positions, where a switch can't happen.
+2. **Rebalance the training mix.** Cantonese is 74% of training conversations and 79% of the switches into English, so one pair largely sets the loss. Options: sample the pairs more evenly, or up-weight the switches into English, where recall drops most (0.38–0.80 against 0.80–0.88 back into L1).
+3. **Stop computing on padding.** Every window is padded to 384 pieces, but the median conversation is 102, so roughly 70% of each batch is padding. Grouping conversations of similar length, or trimming each batch to its longest window, could make steps about 2–3× faster: more data for the same GPU time.
+4. **Try a backbone pretrained causally.** XLM-R was pretrained reading both directions, and our causal mask is new to it. A multilingual decoder language model (e.g. Qwen2.5-0.5B, BLOOM-560m, mGPT) was trained on exactly this kind of next-token prediction. It also gives a training-free baseline: the probability that its next token is Latin script. The linear-probe run (`xlmr_probe_6pairs`) will show how much XLM-R's frozen features already carry, which helps decide whether the swap is worth it.
+5. **Extra training targets, free from our labels:** "is there a switch within the next k pieces", and the run length as a number. These should sharpen the duration features, especially Medium, at little cost.
+6. **A small MLP head instead of a single linear layer**, and layer-wise learning-rate decay. Both are cheap; expect small gains.
+7. **Seeds and a small ensemble.** Averaging 3 seeds usually adds about +0.01, and Week 12 needs multiple seeds for the variance analysis anyway.
+
+**A ceiling on duration.** How long the English stretch lasts depends on words not written yet, so Medium F1 will stay well below Large whatever we do.
+
+**First, an error analysis** (local, from the saved predictions, no GPU): F1 by distance since the last switch, and at punctuation vs mid-clause. It would test whether Cantonese's weak switches into English come from mid-clause switching, and show which of the steps above to prioritise.
