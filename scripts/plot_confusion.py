@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """Confusion-matrix figures, one PNG per language pair, from a results JSON.
 
-    ./.venv/bin/python scripts/plot_confusion.py data/anticipation_xlmr_6pairs.json \
+    ./.venv/bin/python scripts/plot_confusion.py data/anticipation_xlmr_6pairs.json [--overall] \
         --out docs/figures/team_meeting1
 
 Each figure has two panels: the switch matrix (2x2, every scored test
@@ -66,6 +66,21 @@ def panel(ax, counts, labels):
     return im
 
 
+def blind_switch(sw: dict) -> str:
+    """Guessing "switch" at the switch rate p: every row reads p / 1-p, so F1 = p."""
+    p = (sw["tp"] + sw["fn"]) / sw["n"]
+    return (f"Blind guess: say Switch {p:.1%} of the time\n"
+            f"→ F1 {p:.3f} (= P = R) · accuracy {p * p + (1 - p) ** 2:.3f}")
+
+
+def blind_duration(confusion) -> str:
+    """Guessing each class at its frequency q: every row reads q, accuracy sum q^2, macro-F1 1/3."""
+    c = np.asarray(confusion, dtype=float)
+    q = c.sum(1) / c.sum()
+    return (f"Blind guess at the class frequencies: Small {q[0]:.0%} / Medium {q[1]:.0%} / Large {q[2]:.0%}\n"
+            f"→ every row reads those shares · macro-F1 0.333 · accuracy {(q ** 2).sum():.3f}")
+
+
 def figure(pair: str, sw: dict, dur: dict, dur_label: str, path: str) -> None:
     fig, axes = plt.subplots(1, 2, figsize=(10.4, 4.6), facecolor=SURFACE,
                              gridspec_kw=dict(width_ratios=[2, 3], wspace=0.28))
@@ -81,6 +96,10 @@ def figure(pair: str, sw: dict, dur: dict, dur_label: str, path: str) -> None:
         fig.text(ax.get_position().x0, top + 0.17, t, color=INK, fontsize=10.5, ha="left")
     fig.text(axes[0].get_position().x0, top + 0.26, pair.replace("->", " → "), color=INK,
              fontsize=13, fontweight="bold", ha="left")
+    bottom = axes[0].get_position().y0
+    for ax, t in zip(axes, (blind_switch(sw), blind_duration(dur["confusion"]))):
+        fig.text(ax.get_position().x0, bottom - 0.05, t, color=MUTED, fontsize=8.5, ha="left", va="top",
+                 linespacing=1.5)
     cb = fig.colorbar(im, ax=axes, fraction=0.025, pad=0.03)
     cb.set_label("Share of the actual row (recall)", color=MUTED, fontsize=8.5)
     cb.outline.set_visible(False)
@@ -95,13 +114,26 @@ def main() -> int:
     ap.add_argument("results")
     ap.add_argument("--out", default="docs/figures")
     ap.add_argument("--raw", action="store_true", help="use the raw argmax duration, not val-tuned")
+    ap.add_argument("--overall", action="store_true", help="also write all_pairs.png, every pair pooled")
+    ap.add_argument("--model-name", default=None,
+                    help='prefix for the pooled figure\'s title, e.g. "XLM-R fine-tuned"')
     args = ap.parse_args()
     r = json.load(open(args.results))
-    tuned = (r.get("duration_tuned") or {}).get("report", {}).get("duration_per_pair")
+    report = (r.get("duration_tuned") or {}).get("report", {})
+    tuned = report.get("duration_per_pair")
     dur_pp, label = (r["duration_per_pair"], "raw") if args.raw or not tuned else (tuned, "val-tuned")
     os.makedirs(args.out, exist_ok=True)
+    if args.overall:
+        dur = r["duration"] if label == "raw" else report["duration"]
+        path = os.path.join(args.out, "all_pairs.png")
+        title = f"All {len(r['per_pair'])} pairs, pooled"
+        figure(f"{args.model_name} · {title.lower()}" if args.model_name else title,
+               r["overall"], dur, label, path)
+        print("wrote", path)
     for pair, sw in r["per_pair"].items():
-        path = os.path.join(args.out, f"{pair.split('->')[0].lower()}.png")
+        l1, l2 = pair.split("->")                   # German has two pairs: name both in full
+        stem = l1 if l2 == "English" and l1 != "German" else f"{l1}_{l2}"
+        path = os.path.join(args.out, f"{stem.lower()}.png")
         figure(pair, sw, dur_pp[pair], label, path)
         print("wrote", path)
     return 0

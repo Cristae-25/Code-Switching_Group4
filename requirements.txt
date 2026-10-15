@@ -21,6 +21,10 @@ fugashi[unidic-lite]==1.5.2
 ipykernel==7.3.0
 ipython==9.17.1
 
+# Figures (scripts/plot_*.py)
+matplotlib==3.11.2
+seaborn==0.13.2
+
 # Only for the retired fastText tier (src/model_tagger.py) - not installed in
 # .venv. Upstream `fasttext` ships source-only and fails to build on Python 3.13
 # (RuntimeError: libc++ is needed!). fasttext-predict is a prebuilt,
