@@ -69,7 +69,7 @@ WINDOW, STRIDE = 384, 288
 HEAD_LR = 1e-3          # the heads' learning rate (the backbone gets none)
 EVAL_BATCHES = 0        # 0 = score the whole val and test splits
 SEED = 0                # the random heads' initialisation, and data order
-PAIRS = "Cantonese,Chinese,Japanese,Korean,Russian,Arabic"
+PAIRS = "Cantonese,Chinese,Japanese,Korean,Russian,Arabic"   # "" = all 15 pairs
 LABELS_REPO = "CodeSwitchGroup4/switchlingua-tagged-final"
 """
 
@@ -77,9 +77,9 @@ RUN = """
 probe_steps, evalb = (60, 20) if SMOKE else (PROBE_STEPS, EVAL_BATCHES)
 common = (f"python scripts/train_anticipation.py --model {MODEL} --unit subword --freeze-backbone "
           f"--batch-size {BATCH} --window {WINDOW} --stride {STRIDE} --head-lr {HEAD_LR} "
-          f"--eval-batches {evalb} --workers 2 --seed {SEED} --train-langs {PAIRS}")
-n = len(PAIRS.split(","))
-RUNS = {f"{MODEL}_untrained_{n}pairs": (RUN_UNTRAINED, 0), f"{MODEL}_probe_{n}pairs": (RUN_PROBE, probe_steps)}
+          f"--eval-batches {evalb} --workers 2 --seed {SEED}" + (f" --train-langs {PAIRS}" if PAIRS else ""))
+suffix = f"_{len(PAIRS.split(','))}pairs" if PAIRS else ""     # no suffix = all 15, as in train_pretrained.ipynb
+RUNS = {f"{MODEL}_untrained{suffix}": (RUN_UNTRAINED, 0), f"{MODEL}_probe{suffix}": (RUN_PROBE, probe_steps)}
 for tag, (on, steps) in RUNS.items():
     if not on:
         print(f"{tag}: off")
@@ -98,6 +98,9 @@ FT = {"switch_f1": {"Korean->English": 0.813, "Japanese->English": 0.741, "Chine
       "dur_f1": {"Korean->English": 0.597, "Japanese->English": 0.623, "Chinese->English": 0.607,
                  "Arabic->English": 0.596, "Russian->English": 0.593, "Cantonese->English": 0.598},
       "macro": 0.703, "dur_macro": 0.602, "zero_shot": 0.514}
+if PAIRS != "Cantonese,Chinese,Japanese,Korean,Russian,Arabic":
+    FT = None                                  # the reference above is for those 6 pairs only
+ref = lambda key: f" | fine-tuned {FT[key]:.3f}" if FT else ""
 cols = {}
 for tag in RUNS:
     f = f"data/anticipation_{tag}.json"
@@ -108,20 +111,22 @@ for tag in RUNS:
     td = t.get("duration", r["duration"])
     print(f"== {tag}: {r['steps']} steps, tau {r['tau']:.3f}")
     print(f"  switch F1 {o['f1']:.3f} (P {o['precision']:.3f}, R {o['recall']:.3f}) | macro-F1 {r['macro_f1']:.3f}"
-          f" | fine-tuned {FT['macro']:.3f}")
+          + ref("macro"))
     print("  by direction:", {k: round(v["f1"], 3) for k, v in r["per_direction"].items()})
     print(f"  duration (val-tuned): accuracy {td['accuracy']:.3f} | macro-F1 {td['macro_f1']:.3f} | "
           "F1 small/medium/large " + " / ".join(f"{x:.3f}" for x in td["per_class_f1"])
-          + f" | fine-tuned {FT['dur_macro']:.3f}")
+          + ref("dur_macro"))
     if "zero_shot" in r:
-        print(f"  zero-shot (9 Latin-script pairs) F1 {r['zero_shot']['overall']['f1']:.3f}"
-              f" | fine-tuned {FT['zero_shot']:.3f}")
+        print(f"  zero-shot ({len(r['zero_shot']['per_pair'])} held-out pairs) F1 "
+              f"{r['zero_shot']['overall']['f1']:.3f}" + ref("zero_shot"))
     dpp = t.get("duration_per_pair", r["duration_per_pair"])
     name = tag.split("_")[1]
     cols[f"switch F1, {name}"] = {k: v["f1"] for k, v in r["per_pair"].items()}
     cols[f"duration F1, {name}"] = {k: v["macro_f1"] for k, v in dpp.items()}
-cols["switch F1, fine-tuned"], cols["duration F1, fine-tuned"] = FT["switch_f1"], FT["dur_f1"]
-display(pd.DataFrame(cols).sort_values("switch F1, fine-tuned", ascending=False).round(3))
+if FT:
+    cols["switch F1, fine-tuned"], cols["duration F1, fine-tuned"] = FT["switch_f1"], FT["dur_f1"]
+table = pd.DataFrame(cols)
+display(table.sort_values(table.columns[-2 if FT else 0], ascending=False).round(3))
 """
 
 CLEANUP = """
