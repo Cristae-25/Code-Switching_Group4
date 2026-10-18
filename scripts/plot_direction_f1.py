@@ -47,7 +47,10 @@ def pair_name(p: str) -> str:
 
 
 def scores(preds: str, tau: float) -> dict:
-    z = np.load(preds)
+    if os.path.isdir(preds):        # an unzipped .npz: a folder of <name>.npy files
+        z = {f[:-4]: np.load(os.path.join(preds, f)) for f in os.listdir(preds) if f.endswith(".npy")}
+    else:
+        z = np.load(preds)
     y, pair, lang = z["test_y"].astype(bool), z["test_pair"], z["test_lang"]
     fired = 1 / (1 + np.exp(-z["test_logit"])) >= tau
     out = {}
@@ -91,7 +94,7 @@ def figure(s: dict, title: str, path: str) -> None:
     ax.grid(axis="x", color=GRID, linewidth=0.8)
     ax.set_axisbelow(True)
     ax.legend(frameon=False, fontsize=9, labelcolor=INK_2, ncol=3, loc="upper left",
-              bbox_to_anchor=(0, -0.07 * 8 / n))
+              bbox_to_anchor=(0, -0.6 / (0.52 * n + 1.2)))
 
     into2 = np.array([s[p]["into L2"]["f1"] for p in keys])
     into1 = np.array([s[p]["into L1"]["f1"] for p in keys])
@@ -116,7 +119,7 @@ def figure(s: dict, title: str, path: str) -> None:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--preds", default="data/preds_xlmr_durw.npz")
+    ap.add_argument("--preds", default="data/preds_xlmr_durw.npz", help=".npz, or the folder it unzips to")
     ap.add_argument("--results", default="data/anticipation_xlmr_durw_12lang.json")
     ap.add_argument("--out", default="docs/figures/all_pairs/direction_f1.png")
     ap.add_argument("--title", default="Switch F1 by direction, fine-tuned XLM-R")
