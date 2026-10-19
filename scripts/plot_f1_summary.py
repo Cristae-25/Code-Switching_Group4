@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """Switch-F1 summary figure for the 6 script pairs, from the results JSONs.
 
-    ./.venv/bin/python scripts/plot_f1_summary.py --out docs/figures/team_meeting1/f1_summary.png
+    ./.venv/bin/python scripts/plot_f1_summary.py --out docs/figures/chris/team_meeting1/f1_summary.png
 
 Left: mean switch F1 over the 6 pairs (the average of per-pair F1, i.e.
 ``macro_f1``) for every model and training-free baseline, on one 0-1 axis.
@@ -59,7 +59,7 @@ def style(ax) -> None:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--out", default="docs/figures/team_meeting1/f1_summary.png")
+    ap.add_argument("--out", default="docs/figures/chris/team_meeting1/f1_summary.png")
     args = ap.parse_args()
 
     rows = [(label, load(src, key)["macro_f1"], xlmr) for label, src, key, xlmr in MODELS]

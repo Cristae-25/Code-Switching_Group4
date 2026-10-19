@@ -3,7 +3,7 @@
 
     ./.venv/bin/python scripts/plot_direction_f1.py \
         --preds data/preds_xlmr_durw.npz --results data/anticipation_xlmr_durw_12lang.json \
-        --out docs/figures/all_pairs/direction_f1.png
+        --out docs/figures/chris/all_pairs/direction_f1.png
 
 The results JSON only splits direction pooled over pairs, so this rebuilds the
 per-pair split from the saved test predictions (``--save-preds``) and the
@@ -121,7 +121,7 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--preds", default="data/preds_xlmr_durw.npz", help=".npz, or the folder it unzips to")
     ap.add_argument("--results", default="data/anticipation_xlmr_durw_12lang.json")
-    ap.add_argument("--out", default="docs/figures/all_pairs/direction_f1.png")
+    ap.add_argument("--out", default="docs/figures/chris/all_pairs/direction_f1.png")
     ap.add_argument("--title", default="Switch F1 by direction, fine-tuned XLM-R")
     args = ap.parse_args()
     r = json.load(open(args.results))

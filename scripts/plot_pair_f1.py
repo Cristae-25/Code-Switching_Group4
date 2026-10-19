@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 """Per-pair F1 bar charts for the all-15-pair XLM-R runs: switch and duration.
 
-    ./.venv/bin/python scripts/plot_pair_f1.py --out docs/figures/all_pairs
+    ./.venv/bin/python scripts/plot_pair_f1.py --out docs/figures/chris/all_pairs
+    ./.venv/bin/python scripts/plot_pair_f1.py --runs backbones --out docs/figures/chris/mbert
 
 Two figures, one bar per pair and run (untrained, linear probe, fine-tuned),
 pairs sorted by the fine-tuned score, with a side note naming the best and
@@ -15,6 +16,12 @@ The runs are the ``*_12lang.json`` files (they cover all 15 pairs; the name
 predates the run). Untrained and probe use a frozen backbone; the probe
 trained its heads for 12,000 steps, the fine-tuned run 17,500 with balanced
 duration weights, so "probe vs fine-tuned" also differs in training length.
+
+``--runs backbones`` instead compares the fine-tuned XLM-R and mBERT runs
+(identical settings: 17,500 steps, balanced duration weights, same test rows),
+sorted and annotated by mBERT. The two tokenizers cut the text differently, so
+the position counts differ; ``bootstrap_preds.py`` gives the paired row-level
+interval of the difference.
 """
 from __future__ import annotations
 
@@ -33,10 +40,18 @@ import seaborn as sns  # noqa: E402
 SURFACE, INK, INK_2, MUTED = "#fcfcfb", "#0b0b0b", "#52514e", "#898781"
 GRID, BASELINE = "#e1e0d9", "#c3c2b7"
 # untrained -> probe -> fine-tuned is an order (more of the model trained), so one hue, light to dark.
-RUNS = {"Untrained XLM-R": ("xlmr_untrained_12lang", "#b7d3f6"),
-        "Linear probe (12k steps)": ("xlmr_probe_12lang", "#5598e7"),
-        "Fine-tuned XLM-R (17.5k steps)": ("xlmr_durw_12lang", "#184f95")}
-FINE = "Fine-tuned XLM-R (17.5k steps)"
+# Two backbones are two identities, not an order: categorical slots 1 and 2 (as plot_direction_f1.py).
+# Each set is (runs, the run that sorts the bars and fills the side note).
+RUN_SETS = {
+    "xlmr": ({"Untrained XLM-R": ("xlmr_untrained_12lang", "#b7d3f6"),
+              "Linear probe (12k steps)": ("xlmr_probe_12lang", "#5598e7"),
+              "Fine-tuned XLM-R (17.5k steps)": ("xlmr_durw_12lang", "#184f95")},
+             "Fine-tuned XLM-R (17.5k steps)"),
+    "backbones": ({"Fine-tuned XLM-R (17.5k steps)": ("xlmr_durw_12lang", "#2a78d6"),
+                   "Fine-tuned mBERT (17.5k steps)": ("mbert_durw", "#eb6834")},
+                  "Fine-tuned mBERT (17.5k steps)"),
+}
+RUNS, FINE = RUN_SETS["xlmr"]
 
 
 def pair_name(p: str) -> str:
@@ -62,17 +77,31 @@ def scores(metric: str) -> pd.DataFrame:
 def side_note(ax, df: pd.DataFrame, mean: float) -> None:
     ft = df[df.run == FINE].sort_values("f1", ascending=False)
     best, worst = ft.head(3), ft.tail(3).iloc[::-1]
+    who = FINE.split(" (")[0]
     fmt = lambda d: "\n".join(f"{r.pair:<18}{r.f1:.3f}" for r in d.itertuples())
     spread = ft.f1.iloc[0] - ft.f1.iloc[-1]
     ax.axis("off")
     y = 0.98
-    for title, body in (("Fine-tuned, best", fmt(best)), ("Fine-tuned, worst", fmt(worst)),
+    for title, body in ((f"{who}, best", fmt(best)), (f"{who}, worst", fmt(worst)),
                         ("Mean over pairs", f"{mean:.3f}"),
-                        ("Best − worst", f"{spread:.3f}")):
+                        ("Best − worst", f"{spread:.3f}")) + versus(df):
         ax.text(0, y, title, color=MUTED, fontsize=9, va="top", transform=ax.transAxes)
         ax.text(0, y - 0.045, body, color=INK, fontsize=9.5, va="top", family="monospace",
                 linespacing=1.5, transform=ax.transAxes)
         y -= 0.115 + 0.034 * body.count("\n")
+
+
+def versus(df: pd.DataFrame) -> tuple:
+    """With exactly two runs: how often and by how much the focus run beats the other."""
+    if len(RUNS) != 2:
+        return ()
+    other = next(k for k in RUNS if k != FINE)
+    w = df.pivot(index="pair", columns="run", values="f1")
+    d = w[FINE] - w[other]
+    name = other.split(" (")[0].replace("Fine-tuned ", "")
+    return ((f"Beats {name} in", f"{(d > 0).sum()} of {len(d)} pairs"),
+            (f"Mean gap vs {name}", f"{d.mean():+.3f}"),
+            ("Largest gaps", f"{d.idxmax():<18}{d.max():+.3f}\n{d.idxmin():<18}{d.min():+.3f}"))
 
 
 def figure(metric: str, title: str, xlabel: str, path: str) -> None:
@@ -86,8 +115,8 @@ def figure(metric: str, title: str, xlabel: str, path: str) -> None:
     sns.barplot(data=df, y="pair", x="f1", hue="run", order=order, hue_order=list(RUNS),
                 palette={k: c for k, (_, c) in RUNS.items()}, orient="h", ax=ax,
                 width=0.8, edgecolor=SURFACE, linewidth=1.5)
-    for cont, label in zip(ax.containers, RUNS):              # value labels on the fine-tuned bars only
-        if label == FINE:
+    for cont, label in zip(ax.containers, RUNS):              # value labels on the focus run (every run when comparing two)
+        if label == FINE or len(RUNS) == 2:
             ax.bar_label(cont, fmt="%.3f", padding=4, fontsize=8.5, color=INK)
     ax.set_xlim(0, 1)
     ax.set_xlabel(xlabel, color=MUTED, fontsize=9.5, labelpad=8)
@@ -107,8 +136,11 @@ def figure(metric: str, title: str, xlabel: str, path: str) -> None:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--out", default="docs/figures/all_pairs")
+    ap.add_argument("--out", default="docs/figures/chris/all_pairs")
+    ap.add_argument("--runs", choices=list(RUN_SETS), default="xlmr")
     args = ap.parse_args()
+    global RUNS, FINE
+    RUNS, FINE = RUN_SETS[args.runs]
     os.makedirs(args.out, exist_ok=True)
     figure("switch", "Switch prediction F1 by language pair (test split)",
            "Switch F1", os.path.join(args.out, "switch_f1.png"))

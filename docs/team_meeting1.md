@@ -174,11 +174,11 @@ Baselines that need no model training, scored on the same test positions. The co
 
 Each pair has two confusion matrices: switch on all test positions, and duration (Small / Medium / Large) at true switch points. Precision and recall in the duration table are per class.
 
-**Reading the figures:** rows are the actual class, columns the prediction. Each cell shows its count and its share of the row, so the diagonal is the recall of each class. Colour encodes that share, not the raw count, on one 0–100% scale shared by every panel. Raw counts would make a useless colour scale, because "no switch, predicted no switch" is about 50× every other cell. The figures come from `scripts/plot_confusion.py data/anticipation_xlmr_6pairs.json --out docs/figures/team_meeting1`.
+**Reading the figures:** rows are the actual class, columns the prediction. Each cell shows its count and its share of the row, so the diagonal is the recall of each class. Colour encodes that share, not the raw count, on one 0–100% scale shared by every panel. Raw counts would make a useless colour scale, because "no switch, predicted no switch" is about 50× every other cell. The figures come from `scripts/plot_confusion.py data/anticipation_xlmr_6pairs.json --out docs/figures/chris/team_meeting1`.
 
 ### Korean → English
 
-![Korean → English confusion matrices](figures/team_meeting1/korean.png)
+![Korean → English confusion matrices](figures/chris/team_meeting1/korean.png)
 
 **Switch** (F1 0.813, precision 0.790, recall 0.837, accuracy 0.964):
 
@@ -197,7 +197,7 @@ Each pair has two confusion matrices: switch on all test positions, and duration
 
 ### Japanese → English
 
-![Japanese → English confusion matrices](figures/team_meeting1/japanese.png)
+![Japanese → English confusion matrices](figures/chris/team_meeting1/japanese.png)
 
 **Switch** (F1 0.741, precision 0.713, recall 0.771, accuracy 0.953):
 
@@ -216,7 +216,7 @@ Each pair has two confusion matrices: switch on all test positions, and duration
 
 ### Chinese → English
 
-![Chinese → English confusion matrices](figures/team_meeting1/chinese.png)
+![Chinese → English confusion matrices](figures/chris/team_meeting1/chinese.png)
 
 **Switch** (F1 0.702, precision 0.658, recall 0.752, accuracy 0.939):
 
@@ -235,7 +235,7 @@ Each pair has two confusion matrices: switch on all test positions, and duration
 
 ### Arabic → English
 
-![Arabic → English confusion matrices](figures/team_meeting1/arabic.png)
+![Arabic → English confusion matrices](figures/chris/team_meeting1/arabic.png)
 
 **Switch** (F1 0.669, precision 0.647, recall 0.692, accuracy 0.934):
 
@@ -254,7 +254,7 @@ Each pair has two confusion matrices: switch on all test positions, and duration
 
 ### Russian → English
 
-![Russian → English confusion matrices](figures/team_meeting1/russian.png)
+![Russian → English confusion matrices](figures/chris/team_meeting1/russian.png)
 
 **Switch** (F1 0.666, precision 0.656, recall 0.675, accuracy 0.936):
 
@@ -273,7 +273,7 @@ Each pair has two confusion matrices: switch on all test positions, and duration
 
 ### Cantonese → English
 
-![Cantonese → English confusion matrices](figures/team_meeting1/cantonese.png)
+![Cantonese → English confusion matrices](figures/chris/team_meeting1/cantonese.png)
 
 **Switch** (F1 0.625, precision 0.647, recall 0.605, accuracy 0.928):
 

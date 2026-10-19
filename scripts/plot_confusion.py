@@ -2,7 +2,7 @@
 """Confusion-matrix figures, one PNG per language pair, from a results JSON.
 
     ./.venv/bin/python scripts/plot_confusion.py data/anticipation_xlmr_6pairs.json [--overall] \
-        --out docs/figures/team_meeting1
+        --out docs/figures/chris/team_meeting1
 
 Each figure has two panels: the switch matrix (2x2, every scored test
 position) and the duration matrix (3x3, true switch points; the val-tuned

@@ -4,7 +4,7 @@ Draft text for the group paper, to paste into the Overleaf LaTeX source. Prose i
 
 > **Note on file names:** the runs saved as `*_12lang.json` were trained and scored on **all 15 language pairs**. The paper should say 15.
 
-Figures referenced below, from `docs/figures/all_pairs/` (upload them to Overleaf under `figures/`):
+Figures referenced below, from `docs/figures/chris/all_pairs/` (upload them to Overleaf under `figures/`):
 - `switch_f1.png`: switch F1 per pair, untrained vs probe vs fine-tuned
 - `duration_f1.png`: duration macro-F1 per pair, same three models
 - `confusion/all_pairs.png`: pooled confusion matrices of the fine-tuned model, with the blind-guess reference
