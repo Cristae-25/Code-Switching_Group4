@@ -32,8 +32,8 @@ from src.anticipation import N_DUR  # noqa: E402
 from src.causal_model import (check_causality, check_context_free, duration_probs,  # noqa: E402
                               ordinal_targets)
 from src.evaluation import format_duration, format_report, full_report  # noqa: E402
-from src.metrics import apply_class_offsets, prf, tune_class_offsets  # noqa: E402
-from src.models import build_model  # noqa: E402
+from src.metrics import apply_class_offsets, duration_scores, prf, tune_class_offsets  # noqa: E402
+from src.models import build_model, pair_ids  # noqa: E402
 from src.streaming import (DEFAULT_PATHS, VOCAB_PATHS, build_subword_vocab,  # noqa: E402
                            build_vocab, make_loader)
 from src.training import (count_duration_classes, duration_class_weights,  # noqa: E402
@@ -68,6 +68,12 @@ def resolve_defaults(args):
         raise SystemExit(f"--model {model} reads sub-word pieces: use --unit subword")
     context = getattr(args, "context", None)
     explicit = {k for k in ("out", "ckpt") if getattr(args, k, None) is not None}
+    pretrained_only = [f for f, on in (("--pair-emb", getattr(args, "pair_emb", False)),
+                                       ("--lora-r", getattr(args, "lora_r", 0))) if on]
+    if pretrained_only and model not in PRETRAINED:
+        raise SystemExit(f"{', '.join(pretrained_only)} apply to the pretrained encoders only")
+    if getattr(args, "lora_r", 0) and getattr(args, "lr", None) is None:
+        args.lr = 2e-4                           # adapters start at zero and need a larger step
     for k, v in {**UNIT_DEFAULTS[args.unit], **MODEL_DEFAULTS[model]}.items():
         if getattr(args, k, None) is None:
             setattr(args, k, v)
@@ -127,6 +133,30 @@ def scored_positions(b):
     return row.numpy(), pos.numpy()
 
 
+def curve_point(model, loader, dev, n_batches: int, step: int) -> dict:
+    """Validation snapshot during training (``--eval-every``), on a fixed val slice.
+
+    The slice is the first ``n_batches`` of the val split, in file order, so
+    every snapshot scores the same positions. The F1 threshold is tuned on that
+    same slice, which is optimistic but equally so at every step: use the curve's
+    shape, not its level.
+
+    Starting a DataLoader iterator draws one number from torch's global RNG,
+    which would shift every later dropout mask. ``fork_rng`` restores the RNG
+    state afterwards, so a seeded run gives the same model with or without
+    ``--eval-every``.
+    """
+    with torch.random.fork_rng(devices=[dev] if dev.type == "cuda" else []):
+        res = evaluate(model, loader, dev, n_batches)
+    model.train()
+    logit, y = res["logit"].astype(np.float64), res["y"].astype(np.float64)
+    loss = float(np.mean(np.logaddexp(0, logit) - y * logit))     # BCE from logits
+    tau, f1 = tune_threshold(1 / (1 + np.exp(-logit)), res["y"])
+    dur = duration_scores(res["dtrue"], res["dpred"]) if len(res["dtrue"]) else {"macro_f1": 0.0}
+    return dict(step=step, val_switch_loss=loss, val_f1=f1, tau=tau,
+                val_dur_macro_f1=dur["macro_f1"], n=int(len(y)))
+
+
 @torch.no_grad()
 def evaluate(model, loader, dev, max_batches=0):
     """Logits and labels at every scored position, with pair and direction."""
@@ -137,7 +167,7 @@ def evaluate(model, loader, dev, max_batches=0):
         if max_batches and i >= max_batches:
             break
         with autocast(dev):
-            sw, dur = model(b["word_ids"].to(dev), b["lang_ids"].to(dev), b["pair_id"].to(dev))
+            sw, dur = model(b["word_ids"].to(dev), b["lang_ids"].to(dev), pair_ids(model, b).to(dev))
         m = b["sw_mask"]
         out["logit"].append(sw.float().cpu()[m].numpy())
         out["y"].append(b["y_sw"][m].numpy())
@@ -176,8 +206,12 @@ def optimizer_groups(model, args):
         if args.freeze_backbone:
             raise SystemExit("--freeze-backbone needs a pretrained --model")
         return [dict(params=list(model.parameters()), lr=args.lr)], [args.lr]
+    if getattr(args, "lora_r", 0) and args.freeze_backbone:
+        raise SystemExit("--lora-r and --freeze-backbone are exclusive: LoRA already freezes the body")
     heads = [p for n, p in model.named_parameters() if n.startswith("head_")]
-    body = [p for n, p in model.named_parameters() if not n.startswith("head_")]
+    # requires_grad: with --lora-r the pretrained weights are frozen and only the
+    # adapters (and the new language / pair embeddings) train at --lr.
+    body = [p for n, p in model.named_parameters() if not n.startswith("head_") and p.requires_grad]
     if args.freeze_backbone:
         for p in body:
             p.requires_grad_(False)
@@ -265,6 +299,17 @@ def main() -> None:
                     help="ordinal: cumulative cuts P(>Small), P(>Medium) instead of a 3-way softmax")
     ap.add_argument("--context", type=int, choices=[1], default=None,
                     help="pretrained: 1 = read the current piece only (no prefix); default the whole prefix")
+    ap.add_argument("--reshuffle-epochs", action="store_true",
+                    help="a new data order every epoch (off: each epoch repeats the first's order)")
+    ap.add_argument("--eval-every", type=int, default=0,
+                    help="score a fixed val slice every N steps (learning curve in the json)")
+    ap.add_argument("--eval-every-batches", type=int, default=200,
+                    help="size of that val slice, in batches")
+    ap.add_argument("--pair-emb", action="store_true",
+                    help="pretrained: add a learned embedding of the row's language pair (15 pairs)")
+    ap.add_argument("--lora-r", type=int, default=0,
+                    help="pretrained: freeze the encoder, train rank-r LoRA adapters (lr default 2e-4)")
+    ap.add_argument("--lora-alpha", type=float, default=None, help="LoRA scale numerator (default 2r)")
     ap.add_argument("--freeze-backbone", action="store_true",
                     help="pretrained: train the two heads only, the backbone stays as pretrained "
                          "(with --steps 0 nothing is trained: random heads, val-tuned decisions)")
@@ -309,7 +354,8 @@ def main() -> None:
     print(f"model {args.model} | unit {args.unit} | {args.path} | vocab {vocab_size:,} | "
           f"language input {'on' if use_lang else 'off'}")
     n_param = sum(p.numel() for p in model.parameters())
-    print(f"device {dev} | {n_param/1e6:.1f}M params")
+    n_train = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print(f"device {dev} | {n_param/1e6:.1f}M params, {n_train/1e6:.1f}M trainable")
 
     chk = check_causality(model, vocab_size, seq_len=32, device="cpu")
     print(f"causality check: max logit drift {chk['max_abs_logit_drift']:.2e} "
@@ -335,14 +381,18 @@ def main() -> None:
                   predict_at=args.predict_at, turn_sep=args.turn_sep, sep_id=sep_id,
                   lang_input="prev_word" if args.prev_lang else "current",
                   seed=args.seed if args.seed is not None else 0)
+    train_kw = dict(reshuffle=args.reshuffle_epochs)
     print(f"flags: seed={args.seed} predict_at={args.predict_at} turn_sep={args.turn_sep} "
           f"prev_lang={args.prev_lang} dur_class_weights={args.dur_class_weights} "
           f"context={args.context or 'prefix'} dur_head={args.dur_head} "
-          f"freeze_backbone={args.freeze_backbone}")
+          f"freeze_backbone={args.freeze_backbone} pair_emb={args.pair_emb} lora_r={args.lora_r} "
+          f"reshuffle_epochs={args.reshuffle_epochs}")
     loader = lambda split, langs, workers=0: make_loader(  # noqa: E731
         args.path, vocab, split, args.batch_size, workers, languages=langs, **common)
-    train_loader = loader("train", train_langs or None, args.workers)
+    train_loader = make_loader(args.path, vocab, "train", args.batch_size, args.workers,
+                               languages=train_langs or None, **common, **train_kw)
     val_loader, test_loader = loader("val", train_langs or None), loader("test", train_langs or None)
+    curve_loader = val_loader                 # unshuffled: each pass restarts at the same rows
 
     groups, lrs = optimizer_groups(model, args)
     opt = torch.optim.AdamW(groups, weight_decay=0.01)
@@ -358,7 +408,7 @@ def main() -> None:
     ce = nn.CrossEntropyLoss(weight=dur_w, reduction="none")
     ordinal = args.dur_head == "ordinal"
 
-    step, t0, running = 0, time.time(), []
+    step, t0, running, curve = 0, time.time(), [], []
     model.train()
     while step < args.steps:
         for b in train_loader:
@@ -366,7 +416,7 @@ def main() -> None:
                 break
             with autocast(dev):
                 sw, dur = model(b["word_ids"].to(dev), b["lang_ids"].to(dev),
-                                b["pair_id"].to(dev))
+                                pair_ids(model, b).to(dev))
             sw, dur = sw.float(), dur.float()
             m = b["sw_mask"].to(dev)
             loss = (bce(sw, b["y_sw"].to(dev).float()) * m).sum() / m.sum().clamp(min=1)
@@ -392,6 +442,12 @@ def main() -> None:
             if step % 200 == 0:
                 print(f"  step {step:>5}/{args.steps}  loss {np.mean(running[-200:]):.4f}"
                       f"  {step/(time.time()-t0):.2f} it/s", flush=True)
+            if args.eval_every and step % args.eval_every == 0 and step < args.steps:
+                pt = curve_point(model, curve_loader, dev, args.eval_every_batches, step)
+                curve.append(dict(pt, train_loss=float(np.mean(running[-args.eval_every:]))))
+                print(f"  [val @ {step}] switch loss {pt['val_switch_loss']:.4f}  F1 {pt['val_f1']:.4f}"
+                      f"  duration macro-F1 {pt['val_dur_macro_f1']:.4f}  ({pt['n']:,} positions)",
+                      flush=True)
     print(f"trained {step} steps in {(time.time()-t0)/60:.1f} min")
 
     val = evaluate(model, val_loader, dev, args.eval_batches)
@@ -410,6 +466,10 @@ def main() -> None:
                                     "non-CJK word; comparable across tokenizers)"))
     payload = dict(model=args.model, unit=args.unit, **report, tau=tau, val_f1=vf1,
                    params=n_param, causality=chk, steps=step, args=vars(args))
+    if curve:                             # --eval-every; the last point is the final model
+        last = curve_point(model, curve_loader, dev, args.eval_every_batches, step)
+        curve.append(dict(last, train_loss=float(np.mean(running[-args.eval_every:]))))
+        payload["curve"] = curve
     if len(val["dtrue"]):                 # the duration decision, re-balanced on val
         dur_off, dvf = tune_class_offsets(val["dprob"], val["dtrue"])
         payload["duration_tuned"] = tuned_duration(test, tau, dur_off, dvf)

@@ -65,8 +65,13 @@ def in_split(row_id: int, split: str) -> bool:
 
 
 def iter_rows(path: str, split: str = "train", batch_rows: int = 512,
-              languages=None, qualities=None, columns=None):
-    """Yield one dict per row, streaming. Never holds more than one batch."""
+              languages=None, qualities=None, columns=None, row_group_order=None):
+    """Yield one dict per row, streaming. Never holds more than one batch.
+
+    ``row_group_order`` reads the file's row groups in that order instead of
+    file order (the per-epoch reshuffle); every worker must get the same order,
+    because workers shard by the running batch index.
+    """
     info = get_worker_info()
     wid, nworkers = (info.id, info.num_workers) if info else (0, 1)
 
@@ -74,7 +79,12 @@ def iter_rows(path: str, split: str = "train", batch_rows: int = 512,
     # is_entity only exists in parquets tagged after the names-policy change.
     names = pf.schema_arrow.names
     cols = [c for c in (columns or _COLUMNS + ["is_entity"]) if c in names]   # optional columns
-    for bi, batch in enumerate(pf.iter_batches(batch_size=batch_rows, columns=cols)):
+    if row_group_order is None:
+        batches = pf.iter_batches(batch_size=batch_rows, columns=cols)
+    else:
+        batches = (b for g in row_group_order
+                   for b in pf.iter_batches(batch_size=batch_rows, row_groups=[int(g)], columns=cols))
+    for bi, batch in enumerate(batches):
         if bi % nworkers != wid:
             continue
         for row in batch.to_pylist():
@@ -161,7 +171,7 @@ class SwitchWindowDataset(IterableDataset):
                  seed: int = 0, languages=None, qualities=None,
                  batch_rows: int = 512, pair_index: dict[str, int] | None = None,
                  unit: str = "word", predict_at: str = "piece", lang_input: str = "current",
-                 turn_sep: bool = False, sep_id: int | None = None):
+                 turn_sep: bool = False, sep_id: int | None = None, reshuffle: bool = False):
         assert predict_at in ("piece", "word_end") and lang_input in ("current", "prev_word")
         assert 0 < stride <= window
         self.path, self.vocab, self.split = path, vocab, split
@@ -174,6 +184,13 @@ class SwitchWindowDataset(IterableDataset):
         self.unit = unit
         self.predict_at, self.lang_input = predict_at, lang_input
         self.turn_sep, self.sep_id = turn_sep, sep_id
+        # reshuffle: a new order every epoch (--reshuffle-epochs). Off, every epoch
+        # repeats epoch 0's order, as all runs before 2026-11-01 did. Opt-in because a
+        # 12k-step run is 1.02 epochs on 15 pairs and 1.5 on the 6 script pairs, so
+        # turning it on changes those runs. The epoch is counted inside __iter__, so it
+        # also advances in persistent worker copies.
+        self.reshuffle = reshuffle
+        self._epochs = 0
 
     def _windows(self, ex):
         w, s = self.window, self.stride
@@ -237,22 +254,36 @@ class SwitchWindowDataset(IterableDataset):
             start += s
             first = False
 
-    def _stream(self):
+    def epoch_order(self, epoch: int):
+        """Row-group order for an epoch: file order in epoch 0 (so the first epoch is
+        unchanged), then a seeded permutation, the same in every worker."""
+        if epoch == 0 or not self.reshuffle:
+            return None
+        n = pq.ParquetFile(self.path).metadata.num_row_groups
+        return np.random.default_rng([self.seed, epoch]).permutation(n).tolist()
+
+    def _stream(self, epoch: int = 0):
         make = example_for(self.unit)
         for row in iter_rows(self.path, self.split, self.batch_rows,
-                             self.languages, self.qualities, columns=COLUMNS[self.unit]):
+                             self.languages, self.qualities, columns=COLUMNS[self.unit],
+                             row_group_order=self.epoch_order(epoch)):
             ex = make(row, turn_sep=True) if self.turn_sep else make(row)
             if ex is None:
                 continue
             yield from self._windows(ex)
 
     def __iter__(self):
-        stream = self._stream()
-        if not self.shuffle_buffer:
-            yield from stream
+        if not self.shuffle_buffer:              # val / test: always file order
+            yield from self._stream()
             return
+        epoch, self._epochs = self._epochs, self._epochs + 1
+        if not self.reshuffle:
+            epoch = 0
+        stream = self._stream(epoch)
         info = get_worker_info()
-        rng = random.Random(self.seed + (info.id if info else 0))
+        wid = info.id if info else 0
+        # Epoch 0 keeps the original seed exactly; later epochs get their own buffer order.
+        rng = random.Random(self.seed + wid if epoch == 0 else f"{self.seed}-{wid}-{epoch}")
         buf = []
         for item in stream:
             buf.append(item)

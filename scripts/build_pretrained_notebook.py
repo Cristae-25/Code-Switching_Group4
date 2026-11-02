@@ -20,7 +20,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "kaggle", "train_pretrained.ipynb")
 MODULES = ["__init__", "routing", "tokenizer", "dict_tagger", "unicode_tagger", "dispatch",
            "segments", "anticipation", "subword", "token_labels", "metrics", "evaluation",
-           "streaming", "causal_model", "xlmr_model", "models", "training"]
+           "streaming", "causal_model", "lora", "xlmr_model", "models", "training"]
 SCRIPTS = ["train_anticipation"]
 
 
@@ -71,17 +71,23 @@ MODEL = "xlmr"          # "xlmr" | "roberta" | "mbert"
 SMOKE = False           # True: 60 steps + a small evaluation, to check everything runs
 RUN_FULL = True         # train and score on all 15 pairs
 ZERO_SHOT = False       # train on 10 pairs and score the 4 held-out languages
-STEPS = 12_000          # ~1 epoch of the train split at batch 16
+STEPS = 12_000          # 1 epoch = 11,711 steps on all 15 pairs at batch 16 (8,049 on the 6 script pairs)
 BATCH = 16
 WINDOW, STRIDE = 384, 288   # these encoders read at most 512 positions
 LR, HEAD_LR = 2e-5, 1e-3    # pretrained body vs. the two new heads
 EVAL_BATCHES = 0        # 0 = score the whole val and test splits
+RESHUFFLE = False       # True: a new data order every epoch (for multi-epoch STEPS; changes 12k-step runs slightly)
+EVAL_EVERY = 0          # >0: score a fixed val slice every N steps (learning curve in the json), e.g. 3000
 # Tuning flags (all off = the baseline setup). See README "How models are evaluated".
 SEED = 0                # reproducible initialisation and data order
 DUR_WEIGHTS = "none"    # "balanced": class-weighted duration loss (weights from the train split)
 DUR_HEAD = "softmax"    # "ordinal": cumulative cuts P(>Small), P(>Medium) (duration is ordered)
 TURN_SEP = False        # separator piece between speaker turns
 PREV_LANG = False       # input: the language of the last finished word
+PAIR_EMB = False        # input: a learned embedding of the row's language pair (15 pairs)
+LORA_R = 0              # >0: freeze the encoder, train rank-r LoRA adapters (16 is typical)
+LORA_LR = 2e-4          # learning rate of the adapters (replaces LR when LORA_R > 0)
+BACKBONE = ""           # "" = the MODEL's default checkpoint; e.g. "xlm-roberta-large" (same tokenizer)
 PREDICT_AT = "piece"    # "word_end": train and score only at the last piece of each word
 CONTEXT = None          # 1: read the current piece only, no prefix (needs the three flags above off)
 PAIRS = ""              # comma-separated first languages to train and score on ("" = all 15),
@@ -154,13 +160,19 @@ TRAIN = """
 steps, evalb = (60, 20) if SMOKE else (STEPS, EVAL_BATCHES)
 common = (f"python scripts/train_anticipation.py --model {MODEL} --unit subword "
           f"--steps {steps} --batch-size {BATCH} --window {WINDOW} --stride {STRIDE} "
-          f"--lr {LR} --head-lr {HEAD_LR} --eval-batches {evalb} --workers 2 "
+          f"--lr {LORA_LR if LORA_R else LR} --head-lr {HEAD_LR} --eval-batches {evalb} --workers 2 "
           f"--seed {SEED} --dur-class-weights {DUR_WEIGHTS} --dur-head {DUR_HEAD} --predict-at {PREDICT_AT}"
           + (" --turn-sep" if TURN_SEP else "") + (" --prev-lang" if PREV_LANG else "")
+          + (" --pair-emb" if PAIR_EMB else "") + (f" --lora-r {LORA_R}" if LORA_R else "")
+          + (f" --backbone {BACKBONE}" if BACKBONE else "")
+          + (f" --eval-every {EVAL_EVERY}" if EVAL_EVERY and not SMOKE else "")
+          + (" --reshuffle-epochs" if RESHUFFLE else "")
           + (f" --context {CONTEXT}" if CONTEXT else ""))
-TAG = MODEL + "".join(s for s, on in (("_durw", DUR_WEIGHTS != "none"), ("_ord", DUR_HEAD == "ordinal"),
+TAG = MODEL + ("L" if "large" in BACKBONE else "") + "".join(s for s, on in (("_durw", DUR_WEIGHTS != "none"), ("_ord", DUR_HEAD == "ordinal"),
                                       ("_sep", TURN_SEP),
-                                      ("_prev", PREV_LANG), ("_wend", PREDICT_AT == "word_end"),
+                                      ("_prev", PREV_LANG), ("_pair", PAIR_EMB),
+                                      (f"_lora{LORA_R}", bool(LORA_R)), ("_wend", PREDICT_AT == "word_end"),
+                                      (f"_{STEPS // 1000}k", STEPS != 12_000), ("_rs", RESHUFFLE),
                                       (f"_ctx{CONTEXT}", bool(CONTEXT)),
                                       (f"_{len(PAIRS.split(','))}pairs", bool(PAIRS))) if on)
 if RUN_FULL:

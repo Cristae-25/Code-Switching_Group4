@@ -21,7 +21,7 @@ import torch
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.anticipation import N_DUR  # noqa: E402
-from src.models import build_model  # noqa: E402
+from src.models import build_model, pair_ids  # noqa: E402
 from src.metrics import prf  # noqa: E402
 from src.streaming import (COLUMNS, DEFAULT_PATHS, VOCAB_PATHS,  # noqa: E402
                            SwitchWindowDataset, collate, example_for, iter_rows)
@@ -58,6 +58,10 @@ def main() -> None:
                         n_dur=(state["head_dur.weight"].shape[0] if "head_dur.weight" in state
                                else N_DUR), pretrained=False)   # an ordinal head has no .weight
     model.load_state_dict(state)
+    # Only the pretrained pair embedding reads the pair here; scratch checkpoints are
+    # scored as before (without their pair input), so existing numbers do not move.
+    pair_input = ((lambda b: pair_ids(model, b).to(args.device)) if getattr(model, "pair_emb", None) is not None
+                  and pretrained else (lambda b: None))
     model.eval().to(args.device)
     tau = ck["tau"]
 
@@ -85,14 +89,16 @@ def main() -> None:
             if len(batch) < 32:
                 continue
             b, batch = collate(batch[:32]), batch[32:]
-            sw, _ = model(b["word_ids"].to(args.device), b["lang_ids"].to(args.device))
+            sw, _ = model(b["word_ids"].to(args.device), b["lang_ids"].to(args.device),
+                          pair_input(b))
             m = b["sw_mask"]
             logits.append(sw[m].float().numpy())
             truth.append(b["y_sw"][m].numpy())
     if batch:
         b = collate(batch)
         with torch.no_grad():
-            sw, _ = model(b["word_ids"].to(args.device), b["lang_ids"].to(args.device))
+            sw, _ = model(b["word_ids"].to(args.device), b["lang_ids"].to(args.device),
+                          pair_input(b))
         m = b["sw_mask"]
         logits.append(sw[m].float().numpy())
         truth.append(b["y_sw"][m].numpy())
