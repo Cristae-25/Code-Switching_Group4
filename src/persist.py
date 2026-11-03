@@ -93,6 +93,32 @@ def derive_name_policies(frame: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+def apply_lexical_override(frame: pd.DataFrame) -> pd.DataFrame:
+    """Apply ``lexical_override`` to the ``ane`` rows, then re-derive every policy column.
+
+    Adds ``lexical_override``: per token, True where the label was changed, so
+    the AnE-LID original is recoverable (flip it back to the pair's other
+    language). Rows of other methods get an all-False mask.
+    """
+    from .lexical_override import override_tagged
+
+    out = frame.copy()
+    langs, masks = [], []
+    for toks, labs, ents, l1, l2, method in zip(out.tokens, out.token_lang, out.is_entity,
+                                                out.first_language, out.second_language,
+                                                out.method):
+        toks, labs = list(toks), list(labs)
+        if method == "ane":
+            tagged, changed = override_tagged(list(zip(toks, labs)), l1, l2, list(ents))
+            labs = [l for _, l in tagged]
+        else:
+            changed = [False] * len(toks)
+        langs.append(labs)
+        masks.append(changed)
+    out["token_lang"], out["lexical_override"] = langs, masks
+    return derive_name_policies(out)
+
+
 def from_v1(frame: pd.DataFrame) -> pd.DataFrame:
     """Turn v1 labels (names as ``NE``) into policy-free labels + ``is_entity``.
 

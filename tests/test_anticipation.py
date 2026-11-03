@@ -639,3 +639,80 @@ def test_scored_positions_map_back_to_row_and_position():
     row, pos = mod.scored_positions(b)
     assert set(row.tolist()) == {77}
     assert pos.tolist() == list(np.flatnonzero(ex["y_sw"] >= 0))     # each scored once, in order
+
+# --- decide-at-gap: the label moves onto the punctuation the model has read -----
+
+from src.anticipation import gap_landing  # noqa: E402
+
+BLANK = 6          # XLM-R's bare "▁"
+
+
+def test_gap_landing_moves_to_the_last_non_blank_gap_piece():
+    # home , ▁ 然后 : the label of "home" (0) lands on "," (1), never on the bare ▁ (2).
+    langs = np.array([0, NONE, NONE, 1], dtype=np.int8)
+    blank = np.array([False, False, True, False])
+    assert gap_landing(langs, blank) == {0: 1}
+
+
+def test_gap_landing_keeps_adjacent_and_blank_only_gaps_in_place():
+    langs = np.array([0, 0, NONE, 1], dtype=np.int8)
+    blank = np.array([False, False, True, False])       # the only gap piece is a bare ▁
+    assert gap_landing(langs, blank) == {}
+
+
+def test_word_mode_is_unchanged():
+    row = _rich_row([5, 9, BLANK, 7, 8], [0, NONE, NONE, 1, 1], [0, 1, -1, 2, 3], [0] * 5)
+    a, b = subword_example(row), subword_example(row, decide_at="word", blank_ids=[BLANK])
+    for k in a:
+        assert np.array_equal(np.asarray(a[k]), np.asarray(b[k])) if isinstance(a[k], np.ndarray) else a[k] == b[k]
+
+
+def test_gap_mode_moves_every_label_and_keeps_the_totals():
+    rng = np.random.default_rng(5)
+    n = 400
+    langs = rng.choice([0, 1, NONE], size=n, p=[0.5, 0.3, 0.2]).astype(np.int8)
+    ids = rng.integers(3, 60, n)
+    ids[rng.random(n) < 0.3] = BLANK
+    langs[ids == BLANK] = NONE
+    words = np.arange(n)
+    row = _rich_row(ids, langs, words, [0] * n)
+    a = subword_example(row)
+    b = subword_example(row, decide_at="gap", blank_ids=[BLANK])
+    assert (a["y_sw"] >= 0).sum() == (b["y_sw"] >= 0).sum()
+    assert a["y_sw"][a["y_sw"] >= 0].sum() == b["y_sw"][b["y_sw"] >= 0].sum()
+    assert sorted(a["y_len"][a["y_len"] > 0]) == sorted(b["y_len"][b["y_len"] > 0])
+    assert a["dur_known"].sum() == b["dur_known"].sum()
+    moved = gap_landing(langs, ids == BLANK)
+    assert moved                                         # the random row has gaps
+    for src, dst in moved.items():
+        assert b["y_sw"][src] == -1 and b["y_sw"][dst] == a["y_sw"][src]
+        assert b["langs"][dst] == NONE and ids[dst] != BLANK
+        assert b["cur_lang"][dst] == langs[src]          # direction still reads the word's language
+        assert b["shared"][dst] == a["shared"][src] and b["unit_end"][dst] == a["unit_end"][src]
+    # a label never sits on a piece followed by more gap before the next word
+    lab = np.flatnonzero(b["y_sw"] >= 0)
+    for t in lab:
+        nxt = t + 1 + np.flatnonzero(langs[t + 1:] != NONE)[0]
+        assert all(ids[t + 1:nxt] == BLANK)
+
+
+def test_gap_mode_lands_on_a_turn_separator():
+    row = _rich_row([5, 9, 7], [0, NONE, 1], [0, 1, 2], [0, 0, 1])
+    ex = subword_example(row, turn_sep=True, decide_at="gap", blank_ids=[BLANK])
+    assert list(ex["ids"]) == [5, 9, -1, 7]
+    assert list(ex["y_sw"]) == [-1, -1, 1, -1]
+
+
+def test_gap_mode_needs_blank_ids():
+    import pytest
+    with pytest.raises(ValueError):
+        subword_example(_sw_row([5, 9, 7], [0, NONE, 1]), decide_at="gap")
+
+
+def test_gap_windows_score_the_landing_piece_with_the_word_direction():
+    row = _rich_row([5, 9, BLANK, 7, 8], [0, NONE, NONE, 1, 1], [0, 1, -1, 2, 3], [0] * 5)
+    ds = SwitchWindowDataset("unused", None, window=8, stride=8, unit="subword",
+                             decide_at="gap", blank_ids=[BLANK])
+    w = next(iter(ds._windows(subword_example(row, decide_at="gap", blank_ids=[BLANK]))))
+    assert list(w["sw_mask"][:5]) == [False, True, False, True, False]
+    assert w["y_sw"][1] == 1 and w["cur_lang"][1] == 0

@@ -73,6 +73,62 @@ def _disagreements(tokens, labels, l1, l2) -> list[int]:
     return out
 
 
+def counted_labels(tokens, token_lang, is_entity, first_language: str,
+                   second_language: str) -> list[str]:
+    """Each token's language as the training labels count it.
+
+    ``token_lang`` is the tagger's raw label; for names, the default names
+    policy (``segments.resolve_names``) decides what is counted, so showing
+    the raw label made correct names look wrong (Asia/Milan stored L1 but
+    counted English). Names the policy leaves ``other`` (Elanga) take the
+    language ``absorb_other`` folds them into. Punctuation stays ``other``.
+    """
+    sys.path.insert(0, ROOT)
+    from src.segments import DEFAULT_NAMES, absorb_other, resolve_names
+    ent = [bool(x) for x in is_entity]
+    tagged = resolve_names(list(zip(tokens, token_lang)), ent, first_language,
+                           second_language, DEFAULT_NAMES)
+    absorbed = absorb_other(tagged)
+    return [a if e and l == "other" and any(c.isalpha() for c in t) else l
+            for (t, l), (_, a), e in zip(tagged, absorbed, ent)]
+
+
+def _counted(r) -> list[str]:
+    if "is_entity" not in r.index:                   # pre-policy parquet: names are "NE"
+        return list(r.token_lang)
+    return counted_labels(list(r.tokens), list(r.token_lang), list(r.is_entity),
+                          r.first_language, r.second_language)
+
+
+def load_override_sample(per_pair: int, seed: int, languages=None):
+    """``--overrides``: check the lexical override (src/lexical_override.py).
+
+    Exactly ``per_pair`` rows per pair (no boost): two thirds drawn at random
+    from rows where the override relabelled at least one token, the rest at
+    random from the pair as a control. Corrected tokens are outlined in the UI.
+    """
+    import numpy as np
+    import pandas as pd
+    sys.path.insert(0, ROOT)
+    frame = pd.read_parquet(PARQUET)
+    if "lexical_override" not in frame.columns:
+        raise SystemExit(f"{PARQUET} has no lexical_override column - rebuild with "
+                         "scripts/apply_names_policy.py (see CLAUDE.md).")
+    if languages:
+        frame = frame[frame.first_language.isin(languages)]
+    has = frame.lexical_override.map(lambda m: bool(np.any(m)))
+    parts = []
+    for (l1, l2), g in frame.groupby(["first_language", "second_language"]):
+        flipped = g[has.loc[g.index]]
+        n_flip = min(len(flipped), (2 * per_pair) // 3) if len(flipped) else 0
+        a = flipped.sample(n=n_flip, random_state=seed) if n_flip else flipped.iloc[:0]
+        rest = g[~g.row_id.isin(a.row_id)]
+        b = rest.sample(n=min(per_pair - n_flip, len(rest)), random_state=seed)
+        parts.append(pd.concat([a, b]))
+    return (pd.concat(parts).sort_values(["first_language", "second_language", "row_id"])
+              .reset_index(drop=True))
+
+
 def load_sample(per_pair: int, seed: int, tiers=None, qualities=None,
                 languages=None, control: int = 0, pool: int = 200):
     """Deterministic sample aimed at likely errors, per language pair.
@@ -140,13 +196,16 @@ def row_payload(i: int) -> dict:
         "SELECT gold_labels, reviewed_at, n_changed FROM reviews WHERE row_id=?",
         (int(r.row_id),)).fetchone()
     conn.close()
-    predicted = list(r.token_lang)
+    predicted = _counted(r)
     flags = (_disagreements(r.tokens, predicted, r.first_language, r.second_language)
              if r.get("method") == "ane" else [])
     ents = ([bool(x) for x in r.is_entity] if "is_entity" in r.index
             else [x == "NE" for x in predicted])
+    ovr = ([k for k, x in enumerate(r.lexical_override) if x]
+           if "lexical_override" in r.index else [])
     return dict(
         index=i, total=len(s), row_id=int(r.row_id), flags=flags, entities=ents,
+        overridden=ovr,
         first_language=r.first_language, second_language=r.second_language,
         quality=r.quality, tier=str(r.get("method", "")),
         tokens=list(r.tokens),
@@ -161,7 +220,7 @@ def save_verdict(payload: dict) -> dict:
     import datetime
     s = STATE["sample"]
     r = s[s.row_id == payload["row_id"]].iloc[0]
-    predicted = list(r.token_lang)
+    predicted = _counted(r)
     gold = payload["labels"]
     changed = sum(1 for a, b in zip(predicted, gold) if a != b)
     conn = db()
@@ -276,6 +335,7 @@ border:1px solid transparent;user-select:none}
 .tok.ent{font-style:italic;box-shadow:inset 0 0 0 2px var(--ne)}
 .tok.flag{text-decoration:underline dotted 2px;text-underline-offset:4px}
 .tok.changed{outline:2px solid #eda100;outline-offset:1px}
+.tok.ovr{outline:2px dashed #6250d6;outline-offset:1px}
 .sub{font-size:9px;opacity:.65;display:block;text-align:center;letter-spacing:.04em}
 button{font:inherit;padding:7px 15px;border-radius:6px;border:1px solid var(--muted);
 background:transparent;color:var(--ink);cursor:pointer}
@@ -302,10 +362,13 @@ font-size:12px}
   <div class="meta" id="meta"></div>
   <div id="vbar"></div>
   <div class="legend">Click a token to cycle L1 &rarr; L2 &rarr; other &middot;
-    <i style="box-shadow:inset 0 0 0 2px var(--ne);padding:0 3px">outlined italics</i> = named entity (check its language) &middot;
+    <i style="box-shadow:inset 0 0 0 2px var(--ne);padding:0 3px">outlined italics</i> = named entity, shown as the language it
+    <b>counts as</b> under the default names policy (check that language) &middot;
     <u style="text-decoration-style:dotted">dotted underline</u> = AnE and dict-freq disagree &middot;
     <kbd>&larr;</kbd><kbd>&rarr;</kbd> navigate &middot; <kbd>Enter</kbd> save &amp; next &middot;
-    <kbd>r</kbd> reset row &middot; gold outline = you changed it</div>
+    <kbd>r</kbd> reset row &middot; gold outline = you changed it &middot;
+    <span style="outline:2px dashed #6250d6;padding:0 3px">violet dashed</span> = relabelled by the lexical override
+    (AnE had the other language)</div>
   <div id="toks"></div>
 </main>
 <div id="toast"></div>
@@ -326,6 +389,7 @@ function render(){
   const q={exact:"#1baf7a",provisional:"#eda100",low:"#e34948"}[S.quality]||"#8a8a85";
   document.getElementById("meta").innerHTML =
     `<b>${S.first_language} &rarr; ${S.second_language}</b>`
+    + ((S.overridden||[]).length?` &middot; ${S.overridden.length} token(s) relabelled by the override`:``)
     + `<span class="badge" style="background:${q}">${S.quality}</span>`
     + ` &nbsp; row_id ${S.row_id} &middot; ${S.tokens.length} tokens &middot; auto-tagged by ${S.tier||"?"}`;
   document.getElementById("vbar").innerHTML = S.verified
@@ -339,7 +403,8 @@ function render(){
   S.tokens.forEach((t,k)=>{
     const e=document.createElement("span");
     e.className="tok "+cls(S.labels[k])+(S.labels[k]!==S.predicted[k]?" changed":"")
-      +(S.flags.includes(k)?" flag":"")+(S.entities[k]?" ent":"");
+      +(S.flags.includes(k)?" flag":"")+(S.entities[k]?" ent":"")
+      +((S.overridden||[]).includes(k)&&S.labels[k]===S.predicted[k]?" ovr":"");
     e.innerHTML=`${t.replace(/[<&]/g,c=>({'<':'&lt;','&':'&amp;'}[c]))}<span class="sub">${short(S.labels[k])}</span>`;
     e.onclick=()=>{const c=CYCLE(S);S.labels[k]=c[(c.indexOf(S.labels[k])+1)%c.length];render();};
     box.appendChild(e);
@@ -444,6 +509,9 @@ def main() -> int:
     ap.add_argument("--control", type=int, default=0,
                     help="also include N unicode rows/language as a control")
     ap.add_argument("--list", action="store_true", help="show filter options")
+    ap.add_argument("--overrides", action="store_true",
+                    help="check the lexical override: exactly --per-pair rows per pair, "
+                         "2/3 with relabelled tokens (outlined), 1/3 random")
     args = ap.parse_args()
     PARQUET = args.parquet
 
@@ -466,11 +534,14 @@ def main() -> int:
         return 0
 
     print("building the review sample (scoring candidate rows) ...", flush=True)
-    STATE["sample"] = load_sample(args.per_pair, args.seed, tiers,
-                                  qualities, languages, args.control)
+    STATE["sample"] = (load_override_sample(args.per_pair, args.seed, languages)
+                       if args.overrides else
+                       load_sample(args.per_pair, args.seed, tiers,
+                                   qualities, languages, args.control))
     done = progress()
     s = STATE["sample"]
-    print(f"review set: {len(s)} rows ({args.per_pair}/pair, x2 for Hindi and Malay; "
+    print(f"review set: {len(s)} rows ({args.per_pair}/pair"
+          f"{'' if args.overrides else ', x2 for Hindi and Malay'}; "
           f"seed={args.seed}) from {PARQUET}")
     if tiers or qualities or languages:
         print(f"filters: tier={tiers or 'all'} quality={qualities or 'all'} "

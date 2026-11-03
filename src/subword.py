@@ -32,6 +32,14 @@ def is_blank(piece: str) -> bool:
     for m in MARKERS:
         piece = piece.replace(m, "")
     return piece == ""
+
+
+def blank_piece_ids(tokenizer_name: str = "xlm-roberta-base") -> list[int]:
+    """Ids of every bare space-marker piece in a tokenizer's vocabulary
+    (``▁`` = 6 in XLM-R), for ``anticipation.gap_landing``."""
+    from transformers import AutoTokenizer
+    tok = AutoTokenizer.from_pretrained(tokenizer_name)
+    return sorted(i for t, i in tok.get_vocab().items() if is_blank(t))
 LABEL_KEYS = ("y_sw", "y_len", "y_dur", "censored", "dur_known")
 
 

@@ -44,7 +44,7 @@ import pyarrow.parquet as pq
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from scripts.punct_breakdown import ADJ, COMMA, NO_LABEL, SENT, TURN, gap_buckets  # noqa: E402
+from scripts.punct_breakdown import ADJ, COMMA, NO_LABEL, SENT, TURN, gap_buckets, load_preds  # noqa: E402
 from src.anticipation import L1, NONE  # noqa: E402
 from src.evaluation import PAIR_KEYS  # noqa: E402
 from src.metrics import fmt_table, prf  # noqa: E402
@@ -178,7 +178,7 @@ def main():
     ap.add_argument("--view", choices=["word_end", "all"], default="word_end")
     args = ap.parse_args()
 
-    z = np.load(f"data/preds_{args.tag}.npz")
+    z = load_preds(args.tag)
     tau = json.load(open(f"data/anticipation_{args.tag}.json"))["tau"]
     rows, pos, y = z["test_row"], z["test_pos"], z["test_y"]
     prob = 1 / (1 + np.exp(-z["test_logit"].astype(np.float64)))

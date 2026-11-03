@@ -32,7 +32,7 @@ OUT = os.path.join(ROOT, "kaggle", "label_switchlingua.ipynb")
 
 # Everything the tagging path imports. model_tagger (fastText) and the
 # anticipation modules are not on it.
-MODULES = ["__init__", "routing", "tokenizer", "unicode_tagger", "dict_tagger",
+MODULES = ["__init__", "routing", "tokenizer", "unicode_tagger", "dict_tagger", "lexical_override",
            "ane_tagger", "bert_tagger", "dispatch", "segments", "persist"]
 
 

@@ -206,12 +206,70 @@ def _word_features(words, langs):
     return unit_end, lang_in
 
 
-def subword_example(row, turn_sep: bool = False) -> dict | None:
+def gap_landing(langs: np.ndarray, blank: np.ndarray) -> dict[int, int]:
+    """Where each label moves under ``decide_at="gap"``: ``{source: landing}``.
+
+    A label normally sits on the last language-bearing piece before the next
+    one (index ``a``), so in ``home , 然后`` the model decides at ``home``
+    without having read the comma. With the gap rule it moves to the last
+    piece of the gap that is not blank (a bare space marker). The model then
+    decides after reading the punctuation.
+
+    The bare ``▁`` is skipped because XLM-R emits it only when the next
+    character does not merge with the marker (CJK, for example), so landing on
+    it would leak the next word's script. Adjacent pairs, and gaps holding only
+    blanks, keep their label where it is and are left out of the map.
+    """
+    langs = np.asarray(langs)
+    blank = np.asarray(blank, dtype=bool)
+    idx = np.flatnonzero(langs != NONE)
+    out = {}
+    for a, b in zip(idx[:-1], idx[1:]):
+        for j in range(b - 1, a, -1):
+            if not blank[j]:
+                out[int(a)] = j
+                break
+    return out
+
+
+# Value a position holds when it carries no label, per moved key.
+_UNLABELLED = dict(y_sw=-1, y_len=0, y_dur=-1, censored=False, dur_known=False,
+                   shared=False, unit_end=False)
+
+
+def _relocate(ex: dict, moves: dict[int, int]) -> None:
+    """Move every per-position label from source to landing, in place."""
+    if not moves:
+        return
+    src = np.fromiter(moves.keys(), dtype=np.int64)
+    dst = np.fromiter(moves.values(), dtype=np.int64)
+    for k, empty in _UNLABELLED.items():
+        arr = ex.get(k)
+        if arr is None:
+            continue
+        vals = arr[src].copy()
+        arr[src] = empty
+        arr[dst] = vals
+    ex["cur_lang"][dst] = ex["langs"][src]
+
+
+def subword_example(row, turn_sep: bool = False, decide_at: str = "word",
+                    blank_ids=None) -> dict | None:
     """Build one sub-word training example from a ``data/subword.parquet`` row.
 
     ``turn_sep`` inserts a separator piece (id -1, language NONE, so no label
     moves) before the first piece of every utterance after the first.
+
+    ``decide_at="gap"`` moves each label from the last language-bearing piece
+    onto the punctuation that follows it (``gap_landing``); ``blank_ids`` are
+    the tokenizer's bare space-marker ids. Positives, durations and the
+    number of scored positions are unchanged. ``cur_lang`` keeps the language
+    of the word the label belongs to, for the per-direction report.
     """
+    if decide_at not in ("word", "gap"):
+        raise ValueError(f"decide_at is 'word' or 'gap', not {decide_at!r}")
+    if decide_at == "gap" and blank_ids is None:
+        raise ValueError("decide_at='gap' needs blank_ids (the tokenizer's bare space-marker ids)")
     ids = np.asarray(row["piece_ids"], dtype=np.int64)
     langs = np.asarray(row["piece_lang"], dtype=np.int8)
     n = len(ids)
@@ -230,7 +288,7 @@ def subword_example(row, turn_sep: bool = False) -> dict | None:
     if int((langs != NONE).sum()) < 2:
         return None
     unit_end, lang_in = _word_features(words, langs) if words is not None else (None, None)
-    return dict(
+    ex = dict(
         row_id=int(row["row_id"]),
         ids=ids,
         langs=langs,
@@ -242,3 +300,7 @@ def subword_example(row, turn_sep: bool = False) -> dict | None:
         quality=row.get("quality", "unknown"),
         **anticipatory_labels(langs),
     )
+    if decide_at == "gap":
+        ex["cur_lang"] = langs.copy()
+        _relocate(ex, gap_landing(langs, np.isin(ids, np.asarray(blank_ids, dtype=np.int64))))
+    return ex

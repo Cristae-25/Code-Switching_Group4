@@ -386,6 +386,35 @@ Trust tiers on the output: `exact` 160,922 · `provisional` 73,250.
 supersedes it. `ok` was renamed `provisional` to stop the tier from reading as a
 finished result: every Latin pair scores 100%, but on 26–50 self-labelled tokens.
 
+## 5b. Lexical override on AnE-LID (2026-11-03) — `src/lexical_override.py`
+
+AnE-LID was chosen on the only human-annotated sets available: LinCE spa-eng and hin-eng, and Denglisch. It was **never measured on Malay, Vietnamese or Tagalog**, because no gold set exists for them.
+
+**How the error was found.** Two independent signals, with no hand labelling:
+- **The tagger consensus.** Malay was the worst pair, at 95.8% agreement on the words where both taggers name a language.
+- **The trained anticipation model.** Where the taggers disagreed, 40–45% of positions were labelled as switches, against about 11% elsewhere. The model refused almost all of them (recall 0.16–0.18), because the "switches" were AnE calling Malay/Vietnamese function words English:
+  - Malay: `akan` ×1,496, `dan`, `yang`, `dengan`, `saya`
+  - Vietnamese: `và`, `sẽ`, `của`, `nhưng`
+  - whole spans, such as "bekerjasama dengan agensi lain untuk"
+
+**The rule.** dict-freq overrules AnE only on overwhelming evidence:
+- **Frequency margin:** the word must be common in the other language (Zipf ≥ 4) and at least 2.0 Zipf (100×) more common there.
+- **Vietnamese letters:** in a Vietnamese row, a word with Vietnamese-only letters (`đ ă ơ ư` and stacked tone marks) is Vietnamese.
+- **Never touched:** names, acronyms (`AI` is not French `ai`), romanized Hindi (wordfreq's Hindi list is in Devanagari script) and German→French.
+
+| Pair | Tokens relabelled | Share of words | Switches | L2 tokens |
+|---|---:|---:|---:|---:|
+| Malay | 14,809 | 2.85% | −4.8% | −8.0% |
+| Vietnamese | 4,209 | 0.66% | −1.2% | −2.4% |
+| Tagalog | 792 | 0.14% | +0.5% | −0.3% |
+| French | 197 | 0.04% | −0.3% | −0.1% |
+| Italian / Spanish / German | 36 / 15 / 17 | ≤ 0.01% | 0.0% | 0.0% |
+
+**Validation.**
+- **Human-annotated sets:** accuracy is unchanged (`eval_public.py`, column `AnE+override`). See `docs/results/2026-11-03_lexical_override.md`.
+- **Consensus:** agreement rises to 99.1% for Malay and 99.8% for Vietnamese. That rise is partly circular: on the flipped tokens, dict-freq is no longer an independent check.
+- **Spot-check:** random flips in context were correct, apart from the acronym case, which is now excluded.
+
 ## 6. Bugs found and fixed
 
 Each was found by inspecting output, and each changed the results.

@@ -74,18 +74,35 @@ def gap_buckets(pieces, langs, utts=None) -> np.ndarray:
     return out
 
 
-def scan(path: str, limit: int | None = None):
-    """Yield (row_id, pair, buckets, y_sw) for every row of the subword parquet."""
+def relocate_to_gap(buckets, y, ids, langs, blank_ids):
+    """Move each position's bucket and label to where ``--decide-at gap`` scores it."""
+    from src.anticipation import gap_landing
+    b, yy = buckets.copy(), y.copy()
+    for src, dst in gap_landing(np.asarray(langs), np.isin(ids, blank_ids)).items():
+        b[dst], yy[dst] = buckets[src], y[src]
+        b[src], yy[src] = NO_LABEL, -1
+    return b, yy
+
+
+def scan(path: str, limit: int | None = None, blank_ids=None):
+    """Yield (row_id, pair, buckets, y_sw) for every row of the subword parquet.
+
+    With ``blank_ids`` (a ``--decide-at gap`` run), each bucket and label sits
+    on its landing piece; the bucket still describes the gap after the word.
+    """
     f = pq.ParquetFile(path)
-    cols = ["row_id", "first_language", "second_language", "pieces", "piece_lang", "y_sw", "piece_utt"]
+    cols = ["row_id", "first_language", "second_language", "pieces", "piece_lang", "y_sw", "piece_utt",
+            "piece_ids"]
     seen = 0
     for batch in f.iter_batches(batch_size=4096, columns=cols):
         d = batch.to_pydict()
         for i in range(len(d["row_id"])):
             pair = f"{d['first_language'][i]}->{d['second_language'][i]}"
-            yield (d["row_id"][i], pair,
-                   gap_buckets(d["pieces"][i], d["piece_lang"][i], d["piece_utt"][i]),
-                   np.asarray(d["y_sw"][i], dtype=np.int8))
+            b = gap_buckets(d["pieces"][i], d["piece_lang"][i], d["piece_utt"][i])
+            y = np.asarray(d["y_sw"][i], dtype=np.int8)
+            if blank_ids is not None:
+                b, y = relocate_to_gap(b, y, np.asarray(d["piece_ids"][i]), d["piece_lang"][i], blank_ids)
+            yield d["row_id"][i], pair, b, y
             seen += 1
             if limit and seen >= limit:
                 return
@@ -104,9 +121,22 @@ def part_a(counts: dict) -> dict:
     return out
 
 
+def load_preds(tag: str, data_dir: str = "data") -> dict:
+    """``data/preds_<TAG>.npz``, or the folder of ``.npy`` files it unzips to (Kaggle)."""
+    path = os.path.join(data_dir, f"preds_{tag}")
+    if os.path.isdir(path):
+        return {f[:-4]: np.load(os.path.join(path, f)) for f in os.listdir(path) if f.endswith(".npy")}
+    return dict(np.load(path + ".npz"))
+
+
+def has_preds(tag: str, data_dir: str = "data") -> bool:
+    path = os.path.join(data_dir, f"preds_{tag}")
+    return os.path.isdir(path) or os.path.exists(path + ".npz")
+
+
 def part_b(tag: str, lookup: dict, ys: dict, data_dir: str = "data") -> dict:
     """Join the saved test predictions to the buckets on (row_id, piece position)."""
-    z = np.load(os.path.join(data_dir, f"preds_{tag}.npz"))
+    z = load_preds(tag, data_dir)
     tau = json.load(open(os.path.join(data_dir, f"anticipation_{tag}.json")))["tau"]
     rows, pos, y = z["test_row"], z["test_pos"], z["test_y"]
     pred = 1 / (1 + np.exp(-z["test_logit"])) >= tau
@@ -135,8 +165,17 @@ def main():
     ap.add_argument("--limit", type=int, default=None, help="rows to scan (Part B needs all)")
     args = ap.parse_args()
 
+    run_json = f"data/anticipation_{args.tag}.json"
+    run_args = json.load(open(run_json)).get("args", {}) if os.path.exists(run_json) else {}
+    blank_ids = None
+    if run_args.get("decide_at", "word") == "gap":
+        if run_args.get("turn_sep"):
+            raise SystemExit("--turn-sep runs shift piece positions; not supported here")
+        from src.subword import blank_piece_ids
+        blank_ids = blank_piece_ids()
+        print("decide_at=gap run: buckets moved to the landing pieces")
     counts, lookup, ys = {}, {}, {}
-    for row_id, pair, b, y in scan(args.path, args.limit):
+    for row_id, pair, b, y in scan(args.path, args.limit, blank_ids):
         n, k = counts.setdefault(pair, [np.zeros(5, np.int64), np.zeros(5, np.int64)])
         m = (b != NO_LABEL) & (y >= 0)
         np.add.at(n, b[m], 1)
@@ -158,7 +197,7 @@ def main():
     print(fmt_table(share_rows, ["pair", *BUCKETS], "Part A per pair: share of switches (switch rate)"))
 
     out = {"part_a": a}
-    if os.path.exists(f"data/preds_{args.tag}.npz") and not args.limit:
+    if has_preds(args.tag) and not args.limit:
         b = part_b(args.tag, lookup, ys)
         out["part_b"] = b
         print(f"\nPart B: {args.tag}, test, tau={b['tau']:.3f}, pooled F1 {b['overall']['f1']:.4f}")

@@ -86,7 +86,8 @@ def resolve_defaults(args):
     subword_only = [f for f, on in (("--turn-sep", getattr(args, "turn_sep", False)),
                                     ("--prev-lang", getattr(args, "prev_lang", False)),
                                     ("--predict-at word_end",
-                                     getattr(args, "predict_at", "piece") == "word_end")) if on]
+                                     getattr(args, "predict_at", "piece") == "word_end"),
+                                    ("--decide-at gap", getattr(args, "decide_at", "word") == "gap")) if on]
     if subword_only and args.unit != "subword":
         raise SystemExit(f"{', '.join(subword_only)} need the sub-word labels: use --unit subword")
     if context is not None:
@@ -295,6 +296,9 @@ def main() -> None:
                     help="input: the language of the last finished word (pieces)")
     ap.add_argument("--predict-at", choices=["piece", "word_end"], default="piece",
                     help="word_end: train and score only at the last piece of each word")
+    ap.add_argument("--decide-at", choices=["word", "gap"], default="word",
+                    help="gap: put each label on the punctuation after its word, so the model has "
+                         "read it (pieces; see anticipation.gap_landing)")
     ap.add_argument("--dur-head", choices=["softmax", "ordinal"], default="softmax",
                     help="ordinal: cumulative cuts P(>Small), P(>Medium) instead of a 3-way softmax")
     ap.add_argument("--context", type=int, choices=[1], default=None,
@@ -377,12 +381,20 @@ def main() -> None:
         from transformers import AutoTokenizer
         from src.xlmr_model import BACKBONES
         sep_id = AutoTokenizer.from_pretrained(args.backbone or BACKBONES[args.model]).sep_token_id
+    blank_ids = None
+    if args.decide_at == "gap":                        # the tokenizer's bare space markers
+        from src.subword import blank_piece_ids
+        from src.xlmr_model import BACKBONES
+        blank_ids = blank_piece_ids(
+            (args.backbone or BACKBONES[args.model]) if args.model in PRETRAINED else BACKBONES["xlmr"])
+        print(f"decide_at=gap: {len(blank_ids)} blank piece ids {blank_ids[:8]}")
     common = dict(window=args.window, stride=args.stride, pair_index=PAIR_INDEX, unit=args.unit,
                   predict_at=args.predict_at, turn_sep=args.turn_sep, sep_id=sep_id,
+                  decide_at=args.decide_at, blank_ids=blank_ids,
                   lang_input="prev_word" if args.prev_lang else "current",
                   seed=args.seed if args.seed is not None else 0)
     train_kw = dict(reshuffle=args.reshuffle_epochs)
-    print(f"flags: seed={args.seed} predict_at={args.predict_at} turn_sep={args.turn_sep} "
+    print(f"flags: seed={args.seed} predict_at={args.predict_at} decide_at={args.decide_at} turn_sep={args.turn_sep} "
           f"prev_lang={args.prev_lang} dur_class_weights={args.dur_class_weights} "
           f"context={args.context or 'prefix'} dur_head={args.dur_head} "
           f"freeze_backbone={args.freeze_backbone} pair_emb={args.pair_emb} lora_r={args.lora_r} "

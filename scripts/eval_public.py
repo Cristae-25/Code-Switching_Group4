@@ -98,7 +98,10 @@ def main() -> int:
     from src.metrics import wilson
     from src.routing import MODEL_L1_LABEL
 
-    names = ["dict-freq", "mBERT", "AnE", "AnE+dict"]
+    from src.lexical_override import override_tagged
+
+    names = ["dict-freq", "mBERT", "AnE", "AnE+dict", "AnE+override"]
+    n_flipped = {}
     rows_acc, rows_agree = [], []
 
     for set_name in args.sets.split(","):
@@ -123,7 +126,15 @@ def main() -> int:
                       for t, _ in ane_row]
                 hy = [a if a != "?" and c >= args.threshold else d
                       for a, (_, c), d in zip(an, ane_row, df)]
-                preds = {"dict-freq": df, "mBERT": mb, "AnE": an, "AnE+dict": hy}
+                # production: AnE, then the lexical override (src/lexical_override.py)
+                code = {"EN": "English", "L1": lang}
+                ov, changed = override_tagged([(w, code.get(a, "other")) for w, a in zip(words, an)],
+                                              lang, "English")
+                ov = [a if not c else ("EN" if l == "English" else "L1")
+                      for a, (_, l), c in zip(an, ov, changed)]
+                n_flipped[set_name] = n_flipped.get(set_name, 0) + sum(
+                    c for c, g in zip(changed, gold) if g != "-")
+                preds = {"dict-freq": df, "mBERT": mb, "AnE": an, "AnE+dict": hy, "AnE+override": ov}
                 for i, g in enumerate(gold):
                     if g == "-":
                         continue
@@ -146,10 +157,13 @@ def main() -> int:
                            split_ok_ane / max(split_n, 1), split_ok_dict / max(split_n, 1)))
 
     print("=== 1. token accuracy on human-annotated sets (L1 / EN tokens only) ===")
-    print(f"{'set':14}{'n':>7}" + "".join(f"{k:>11}" for k in names))
+    print(f"{'set':14}{'n':>7}" + "".join(f"{k:>14}" for k in names))
     for s, n, acc in rows_acc:
-        print(f"{s:14}{n:>7}" + "".join(f"{acc[k]:>10.1%} " for k in names))
+        print(f"{s:14}{n:>7}" + "".join(f"{acc[k]:>13.1%} " for k in names))
     print("  (denglisch is probably in AnE's training data - treat its AnE score as an upper bound)")
+    print("  AnE+override: tokens flipped per set "
+          + ", ".join(f"{s} {n_flipped.get(s, 0)}" for s, _, _ in rows_acc)
+          + " (lince_hineng is out of scope: always identical to AnE)")
 
     print("\n=== 2. does AnE / dict-freq agreement predict correctness? ===")
     print(f"{'set':14}{'agree':>8}{'acc|agree':>11}{'95% CI':>17}"

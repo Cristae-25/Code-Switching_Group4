@@ -171,8 +171,12 @@ class SwitchWindowDataset(IterableDataset):
                  seed: int = 0, languages=None, qualities=None,
                  batch_rows: int = 512, pair_index: dict[str, int] | None = None,
                  unit: str = "word", predict_at: str = "piece", lang_input: str = "current",
-                 turn_sep: bool = False, sep_id: int | None = None, reshuffle: bool = False):
+                 turn_sep: bool = False, sep_id: int | None = None, reshuffle: bool = False,
+                 decide_at: str = "word", blank_ids=None):
         assert predict_at in ("piece", "word_end") and lang_input in ("current", "prev_word")
+        assert decide_at in ("word", "gap")
+        if decide_at == "gap" and unit != "subword":
+            raise ValueError("decide_at='gap' needs the sub-word labels")
         assert 0 < stride <= window
         self.path, self.vocab, self.split = path, vocab, split
         self.window, self.stride = window, stride
@@ -184,6 +188,9 @@ class SwitchWindowDataset(IterableDataset):
         self.unit = unit
         self.predict_at, self.lang_input = predict_at, lang_input
         self.turn_sep, self.sep_id = turn_sep, sep_id
+        # decide_at="gap": each label sits on the punctuation after its word
+        # (anticipation.gap_landing); blank_ids are the bare space-marker ids.
+        self.decide_at, self.blank_ids = decide_at, blank_ids
         # reshuffle: a new order every epoch (--reshuffle-epochs). Off, every epoch
         # repeats epoch 0's order, as all runs before 2026-11-01 did. Opt-in because a
         # 12k-step run is 1.02 epochs on 15 pairs and 1.5 on the 6 script pairs, so
@@ -222,7 +229,7 @@ class SwitchWindowDataset(IterableDataset):
             out["lang_ids"][:] = PAD_LANG
             out["lang_ids"][:k] = langs[start:stop]
             out["cur_lang"] = np.full(w, PAD_LANG, dtype=np.int64)   # for reporting direction
-            out["cur_lang"][:k] = ex["langs"][start:stop]
+            out["cur_lang"][:k] = ex.get("cur_lang", ex["langs"])[start:stop]
             out["y_sw"][:k] = np.maximum(ex["y_sw"][start:stop], 0)
             out["y_dur"][:k] = np.maximum(ex["y_dur"][start:stop], 0)
 
@@ -267,7 +274,10 @@ class SwitchWindowDataset(IterableDataset):
         for row in iter_rows(self.path, self.split, self.batch_rows,
                              self.languages, self.qualities, columns=COLUMNS[self.unit],
                              row_group_order=self.epoch_order(epoch)):
-            ex = make(row, turn_sep=True) if self.turn_sep else make(row)
+            kw = dict(turn_sep=True) if self.turn_sep else {}
+            if self.decide_at == "gap":
+                kw.update(decide_at="gap", blank_ids=self.blank_ids)
+            ex = make(row, **kw)
             if ex is None:
                 continue
             yield from self._windows(ex)

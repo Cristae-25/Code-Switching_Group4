@@ -74,9 +74,12 @@ def tag_tokens(tokens: list[str], first_language: str, second_language: str,
     strategy = row_strategy(tokens, first_language, second_language)
     if strategy == "ane":
         from .ane_tagger import tag_tokens_ane
-        return _devanagari_is_hindi(
+        from .lexical_override import override_tagged
+        tagged = _devanagari_is_hindi(
             tag_tokens_ane(tokens, first_language, second_language, labels=ane_labels),
             first_language)
+        ents = is_entity if is_entity is not None and len(is_entity) == len(tagged) else None
+        return override_tagged(tagged, first_language, second_language, ents)[0]
     if strategy == "unicode":
         from .unicode_tagger import tag_tokens_unicode
         tagged = tag_tokens_unicode(tokens, first_language, second_language)

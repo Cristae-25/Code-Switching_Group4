@@ -3,7 +3,7 @@
 
     ./.venv/bin/python scripts/bootstrap_preds.py xlmr_6pairs [xlmr_durw_6pairs] [--n 1000]
 
-Each TAG reads ``data/preds_<TAG>.npz`` (written by ``--save-preds``) and the
+Each TAG reads ``data/preds_<TAG>.npz`` (written by ``--save-preds``), or the folder it unzips to, and the
 switch threshold from ``data/anticipation_<TAG>.json``. Conversations, not
 positions, are resampled: positions in one row are correlated, so a
 position-level bootstrap would give intervals that are too narrow.
@@ -32,8 +32,12 @@ METRICS = ("switch_f1", "dur_macro_f1", "dur_medium_f1", "e2e_acc")
 
 
 def load(tag: str, data_dir: str = "data") -> dict:
-    z = np.load(os.path.join(data_dir, f"preds_{tag}.npz"))
-    if "test_drow" not in z.files:
+    path = os.path.join(data_dir, f"preds_{tag}")
+    if os.path.isdir(path):         # an unzipped .npz: a folder of <name>.npy files
+        z = {f[:-4]: np.load(os.path.join(path, f)) for f in os.listdir(path) if f.endswith(".npy")}
+    else:
+        z = np.load(path + ".npz")
+    if "test_drow" not in z:
         raise SystemExit(f"preds_{tag}.npz predates per-row duration arrays: re-run it")
     tau = json.load(open(os.path.join(data_dir, f"anticipation_{tag}.json")))["tau"]
     fired = 1 / (1 + np.exp(-z["test_dlogit"])) >= tau

@@ -18,7 +18,7 @@ import os
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "kaggle", "train_pretrained.ipynb")
-MODULES = ["__init__", "routing", "tokenizer", "dict_tagger", "unicode_tagger", "dispatch",
+MODULES = ["__init__", "routing", "tokenizer", "dict_tagger", "lexical_override", "unicode_tagger", "dispatch",
            "segments", "anticipation", "subword", "token_labels", "metrics", "evaluation",
            "streaming", "causal_model", "lora", "xlmr_model", "models", "training"]
 SCRIPTS = ["train_anticipation"]
@@ -89,6 +89,7 @@ LORA_R = 0              # >0: freeze the encoder, train rank-r LoRA adapters (16
 LORA_LR = 2e-4          # learning rate of the adapters (replaces LR when LORA_R > 0)
 BACKBONE = ""           # "" = the MODEL's default checkpoint; e.g. "xlm-roberta-large" (same tokenizer)
 PREDICT_AT = "piece"    # "word_end": train and score only at the last piece of each word
+DECIDE_AT = "gap"       # adopted 2026-11-03 (groupUpdate2 §1): each label sits on the punctuation after its word; "word" = Update #1
 CONTEXT = None          # 1: read the current piece only, no prefix (needs the three flags above off)
 PAIRS = ""              # comma-separated first languages to train and score on ("" = all 15),
                         # e.g. "Cantonese,Chinese,Japanese,Korean,Russian,Arabic"
@@ -161,7 +162,8 @@ steps, evalb = (60, 20) if SMOKE else (STEPS, EVAL_BATCHES)
 common = (f"python scripts/train_anticipation.py --model {MODEL} --unit subword "
           f"--steps {steps} --batch-size {BATCH} --window {WINDOW} --stride {STRIDE} "
           f"--lr {LORA_LR if LORA_R else LR} --head-lr {HEAD_LR} --eval-batches {evalb} --workers 2 "
-          f"--seed {SEED} --dur-class-weights {DUR_WEIGHTS} --dur-head {DUR_HEAD} --predict-at {PREDICT_AT}"
+          f"--seed {SEED} --dur-class-weights {DUR_WEIGHTS} --dur-head {DUR_HEAD} --predict-at {PREDICT_AT} "
+          f"--decide-at {DECIDE_AT}"
           + (" --turn-sep" if TURN_SEP else "") + (" --prev-lang" if PREV_LANG else "")
           + (" --pair-emb" if PAIR_EMB else "") + (f" --lora-r {LORA_R}" if LORA_R else "")
           + (f" --backbone {BACKBONE}" if BACKBONE else "")
@@ -172,6 +174,7 @@ TAG = MODEL + ("L" if "large" in BACKBONE else "") + "".join(s for s, on in (("_
                                       ("_sep", TURN_SEP),
                                       ("_prev", PREV_LANG), ("_pair", PAIR_EMB),
                                       (f"_lora{LORA_R}", bool(LORA_R)), ("_wend", PREDICT_AT == "word_end"),
+                                      ("_gap", DECIDE_AT == "gap"),
                                       (f"_{STEPS // 1000}k", STEPS != 12_000), ("_rs", RESHUFFLE),
                                       (f"_ctx{CONTEXT}", bool(CONTEXT)),
                                       (f"_{len(PAIRS.split(','))}pairs", bool(PAIRS))) if on)
