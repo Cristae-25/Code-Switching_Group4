@@ -116,7 +116,7 @@ Status key: ✅ done · 🟡 partial / done differently · ⬜ not started
 
 ## Pace check — 2026-10-06 (Week 5)
 
-**Still ahead of schedule.** Weeks 4–6 are met, and Week 5's backbone (XLM-R with a causal mask) was trained on Kaggle 2026-09-29. The team is onboarding this week (`docs/superpowers/plans/2026-10-06-team-kickoff-meeting.md`): each member runs one distinct XLM-R configuration on Kaggle (plain, adopted flags, a second seed, zero-shot with flags). Open against the named milestones: gradient-flow test (Week 7), multi-seed variance (Week 12, the first second-seed run starts this week), a second non-English L2.
+**Still ahead of schedule.** Weeks 4–6 are met, and Week 5's backbone (XLM-R with a causal mask) was trained on Kaggle 2026-09-29. The team is onboarding this week: each member runs one distinct XLM-R configuration on Kaggle (plain, adopted flags, a second seed, zero-shot with flags). Open against the named milestones: gradient-flow test (Week 7), multi-seed variance (Week 12, the first second-seed run starts this week), a second non-English L2.
 
 ## Update — 2026-10-12 (XLM-R on the 6 script pairs)
 
