@@ -111,6 +111,21 @@ def test_curve_point_scores_a_fixed_slice_and_restores_train_mode(tmp_path):
     assert {"step", "val_switch_loss", "val_f1", "tau", "val_dur_macro_f1"} <= set(a)
 
 
+def test_curve_point_logs_the_val_duration_loss(tmp_path):
+    """val_dur_loss is the 3-class cross-entropy at the dur_mask positions of the same slice."""
+    mod = _train_module()
+    from src.models import build_model
+    from src.streaming import make_loader
+    loader = make_loader(_parquet(tmp_path), None, "train", 4, 0, window=8, stride=6, unit="subword",
+                         shuffle_buffer=0)
+    m = build_model(dict(model="scratch", d_model=16, layers=1, heads=2, window=8), 60, use_lang=False)
+    pt = mod.curve_point(m, loader, torch.device("cpu"), 3, step=1)
+    res = mod.evaluate(m, loader, torch.device("cpu"), 3)
+    assert pt["n_dur"] == len(res["dtrue"]) > 0
+    want = -np.mean(np.log(res["dprob"][np.arange(len(res["dtrue"])), res["dtrue"]]))
+    assert pt["val_dur_loss"] == pytest.approx(want, rel=1e-5)
+
+
 def test_curve_point_leaves_the_global_rng_untouched(tmp_path):
     """A DataLoader iterator draws from torch's RNG; the snapshot must not shift dropout."""
     mod = _train_module()

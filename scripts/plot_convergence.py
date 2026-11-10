@@ -4,8 +4,9 @@
 
 Reads `data/anticipation_<TAG>.json` -> `curve` (a fixed val slice scored every N steps)
 and writes `<out>/convergence.png`: four small multiples sharing one step axis.
-Switch: val F1 and val loss. Duration: val macro-F1 (raw, no tuned offsets). Total:
-the training loss L_sw + lambda_2 * L_dur over the preceding N steps. Dotted lines mark
+Switch: val F1 and val loss. Duration: val macro-F1 (raw, no tuned offsets) and
+val loss (`val_dur_loss`, logged since 2026-11-10). For older runs, which lack it,
+the last panel is the training loss L_sw + lambda_2 * L_dur over the preceding N steps. Dotted lines mark
 epoch ends (11,711 steps at batch 16 on all 15 pairs).
 """
 import argparse
@@ -45,8 +46,10 @@ def main():
         (axes[0, 1], [p["val_switch_loss"] for p in c], SW, "Switch: val loss (BCE)", "{:.3f}"),
         (axes[1, 0], [p["val_dur_macro_f1"] for p in c], DUR,
          "Duration: val macro-F1, 3 classes (raw)", "{:.3f}"),
+        (axes[1, 1], [p["val_dur_loss"] for p in c], DUR, "Duration: val loss (cross-entropy)", "{:.3f}")
+        if all(p.get("val_dur_loss") is not None for p in c) else
         (axes[1, 1], [p["train_loss"] for p in c], TOTAL,
-         "Total training loss  L_sw + 0.3·L_dur", "{:.3f}"),
+         f"Total training loss  L_sw + {d['args'].get('dur_weight', 0.3):g}·L_dur", "{:.3f}"),
     ]
     for ax, ys, col, title, fmt in panels:
         ax.set_facecolor(SURFACE)

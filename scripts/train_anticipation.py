@@ -154,8 +154,15 @@ def curve_point(model, loader, dev, n_batches: int, step: int) -> dict:
     loss = float(np.mean(np.logaddexp(0, logit) - y * logit))     # BCE from logits
     tau, f1 = tune_threshold(1 / (1 + np.exp(-logit)), res["y"])
     dur = duration_scores(res["dtrue"], res["dpred"]) if len(res["dtrue"]) else {"macro_f1": 0.0}
+    # Duration loss: unweighted 3-class cross-entropy at the dur_mask positions, the same
+    # quantity as L_dur in training with --dur-class-weights none (for an ordinal head,
+    # the NLL of its derived class probabilities). None if the slice has no such position.
+    nd = len(res["dtrue"])
+    p_true = res["dprob"][np.arange(nd), res["dtrue"].astype(int)] if nd else None
+    dur_loss = float(-np.mean(np.log(np.clip(p_true, 1e-12, None)))) if nd else None
     return dict(step=step, val_switch_loss=loss, val_f1=f1, tau=tau,
-                val_dur_macro_f1=dur["macro_f1"], n=int(len(y)))
+                val_dur_macro_f1=dur["macro_f1"], val_dur_loss=dur_loss,
+                n=int(len(y)), n_dur=int(nd))
 
 
 @torch.no_grad()
@@ -458,7 +465,8 @@ def main() -> None:
                 pt = curve_point(model, curve_loader, dev, args.eval_every_batches, step)
                 curve.append(dict(pt, train_loss=float(np.mean(running[-args.eval_every:]))))
                 print(f"  [val @ {step}] switch loss {pt['val_switch_loss']:.4f}  F1 {pt['val_f1']:.4f}"
-                      f"  duration macro-F1 {pt['val_dur_macro_f1']:.4f}  ({pt['n']:,} positions)",
+                      f"  duration loss {pt['val_dur_loss'] if pt['val_dur_loss'] is None else round(pt['val_dur_loss'], 4)}"
+                      f"  macro-F1 {pt['val_dur_macro_f1']:.4f}  ({pt['n']:,} positions)",
                       flush=True)
     print(f"trained {step} steps in {(time.time()-t0)/60:.1f} min")
 
