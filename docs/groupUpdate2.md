@@ -84,6 +84,69 @@ Where the switch gain comes from (`scripts/gap_split.py`):
 - **The effect without retraining:** `xlmr_prev_gap` re-scored on the corrected labels gives Malay 0.652 → 0.703, Vietnamese 0.760 → 0.777, and 0.744 → 0.747 overall.
 - **From here on:** Update #2 results use the version-2 labels. Runs on version 1 (everything up to `xlmr_prev_gap`, including the 36k and LoRA runs started 2026-11-03) are compared only with each other.
 
+## 1c. Training longer: 36k steps (3 epochs)
+
+*Recorded 2026-11-04. Run `xlmr_prev_gap_36k_rs` (Kaggle T4): the same settings as `xlmr_prev_gap` (seed 0, all 15 pairs, `PREV_LANG=True`, `DECIDE_AT="gap"`, version-1 labels), but with 36,000 steps instead of 12,000 (3.07 epochs instead of 1.02), `RESHUFFLE=True` and `EVAL_EVERY=3000`. Causality check passed (drift 0.00e+00). Paired row bootstrap: `scripts/bootstrap_preds.py xlmr_prev_gap xlmr_prev_gap_36k_rs` → `data/bootstrap_xlmr_prev_gap_vs_36k_rs.json`.*
+
+**The question:** is one epoch enough? **The answer:** no. Three epochs improve every metric, on every pair. Most of the gain arrives by the second epoch.
+
+### Results (test, paired against the 12k run)
+
+| | `xlmr_prev_gap` (12k) | `xlmr_prev_gap_36k_rs` (36k) | Paired difference [95% CI] |
+|---|---:|---:|---|
+| Switch F1 | 0.744 | **0.759** | +0.014 [+0.014, +0.015] |
+| Precision / recall | 0.783 / 0.709 | 0.798 / 0.723 | both rise |
+| Macro-F1 over pairs | 0.794 | **0.808** | |
+| F1 into L2 / into L1 | 0.634 / 0.858 | 0.650 / 0.873 | |
+| Duration macro-F1, raw (val-tuned) | 0.596 (0.624) | 0.616 (0.636) | +0.020 [+0.018, +0.022] (raw) |
+| Medium F1, raw | 0.298 | 0.349 | +0.051 [+0.047, +0.054] |
+| End-to-end accuracy | 0.522 | 0.534 | +0.012 [+0.011, +0.014] |
+| Switch F1 re-scored on version-2 labels (`rescore_preds.py`) | 0.747 | **0.761** | |
+
+- **The gain is real, but small.** Every switch-F1 interval excludes 0: 15 of 15 pairs overall, though Korean's lower bound is +0.000. The gain is well above the run-to-run noise we have measured: two seed-0 runs of the same configuration differed by +0.001 overall (§1, the bugged rerun of `xlmr_prev`) and by up to ±0.004 per pair (the 2026-09-29 pair of runs). Variance across *different* seeds is still unmeasured, so a second seed is needed before we call this a 0.014 improvement rather than "about 0.01–0.02".
+- **The weakest pairs gain the most.** German→French +0.024, Malay +0.020, Tagalog +0.020, Hindi +0.017, Vietnamese +0.016, Cantonese +0.015. Korean gains +0.003, Japanese and Chinese +0.007. The spread between the best and the worst pair narrows from 0.244 to 0.227.
+- **Duration gains concentrate in Medium.** Raw Medium F1 rises +0.051, while macro-F1 rises +0.020. After val tuning, the gain shrinks to +0.012 (0.624 → 0.636). Tuning had already recovered much of what the 12k model left on the table. German→English is the one pair whose duration gain is not significant (+0.004 [−0.009, +0.016]).
+
+### Learning curve (fixed val slice, 250,168 positions)
+
+| Step | 3k | 6k | 9k | 12k | 15k | 18k | 21k | 24k | 27k | 30k | 33k | 36k |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Epoch | 0.26 | 0.51 | 0.77 | 1.02 | 1.28 | 1.54 | 1.79 | 2.05 | 2.31 | 2.56 | 2.82 | 3.07 |
+| Val switch F1 | 0.710 | 0.730 | 0.738 | 0.743 | 0.747 | 0.748 | 0.752 | 0.754 | 0.755 | 0.755 | 0.755 | 0.755 |
+| Val switch loss | 0.154 | 0.141 | 0.138 | 0.134 | 0.132 | 0.131 | 0.130 | 0.130 | 0.129 | 0.128 | 0.128 | 0.128 |
+| Val duration macro-F1 (raw) | 0.583 | 0.601 | 0.600 | 0.590 | 0.603 | 0.590 | 0.627 | 0.625 | 0.618 | 0.621 | 0.624 | 0.623 |
+
+- **No overfitting.** Validation loss falls at every checkpoint, even in the third epoch, when every row has already been seen twice.
+- **Diminishing returns.** Of the +0.012 val F1 gained after step 12k, +0.011 comes by step 24k (the end of epoch 2). The third epoch adds +0.0015. Duration plateaus by 21k as well. 24k steps is the better cost/benefit point, at about 2.5 h on a T4 instead of 3.8 h.
+- **The gain comes from more steps, not from the LR schedule.** The one-cycle schedule stretches to the run's length (10% warm-up, then cosine decay). At step 12k, the 36k run is still at ~85% of its peak learning rate, yet its val F1 (0.743) already equals the fully annealed 12k run's final val F1 (0.743). Annealing alone does not explain the gain; continuing to train does. **Reshuffling** is not a confound either: it changes only the order of the epochs after the first, and the 12k run never reaches a second epoch.
+
+### Duration as two classes: Small + Medium vs Large, at 36k
+
+*`scripts/plot_duration_binary.py xlmr_prev_gap_36k_rs --out docs/figures/chris/gap_36k` → `data/duration_binary_xlmr_prev_gap_36k_rs.json`. As in §1, there is no retraining: P(Short) = P(Small) + P(Medium), and the cut (0.52 again) is tuned on val. The paired 12k-vs-36k intervals come from a 1,000-resample row bootstrap on the same test rows.*
+
+| Duration at the true switch points (n = 180,990) | Accuracy | Macro-F1 | Blind-guess macro-F1 | Cohen's κ |
+|---|---:|---:|---:|---:|
+| 3 classes, 12k (val-tuned) | 0.674 | 0.624 | 0.333 | 0.48 |
+| 3 classes, 36k (val-tuned) | 0.683 | 0.636 | 0.333 | 0.49 |
+| 2 classes Short 1–6 / Large 7+, 12k | 0.812 | 0.812 [0.810, 0.814] | 0.500 | 0.62 |
+| 2 classes Short 1–6 / Large 7+, 36k | **0.817** | **0.817** [0.814, 0.818] | 0.500 | **0.63** |
+| 2 classes, 36k − 12k (paired) | | +0.004 [+0.003, +0.006] | | +0.009 [+0.007, +0.011] |
+
+- **Merging gives the same lift at 36k as at 12k:** +0.18 macro-F1 and +0.14 κ over three classes (0.636 → 0.817, κ 0.49 → 0.63). Per class, Short F1 is 0.811 and Large 0.822. Every pair improves, from Tagalog 0.558 → 0.713 to Korean 0.661 → 0.851.
+- **Longer training helps the two-class view less** (+0.004 macro-F1) than the three-class one (+0.012 tuned, +0.020 raw). Most of what the extra epochs learned is the Small/Medium boundary, and merging the two classes hides exactly that boundary. In the val-tuned three-class confusion, Small↔Medium errors fall by 1,018 (24,344 → 23,326), Medium↔Large errors by 499, and Small↔Large errors by 122.
+- **What two classes leave behind is the 6/7 cut.** In the three-class confusion at 36k, 41% of errors are Small↔Medium (23,326 of 57,324), and merging forgives all of them. Medium↔Large errors (24,581, 43%) are what remain. A true 5- or 6-word run looks like a 7-word one from the prefix, so the two-class task is mostly the question "will this run pass 6 words?"
+- **How to report it:** the same as in §1. The three classes stay the headline (they are the project requirement), and the two classes are a secondary view from the same model. A two-class *head* trained directly with a binary loss (`y_len ≥ 7`) has not been tried. It would show whether the post-hoc merge leaves anything on the table, but the val-tuned cut already makes the merge close to optimal for this model.
+
+![Per-pair F1, 36k](figures/chris/gap_36k/pair_f1.png)
+
+![Pooled confusion matrices, 36k](figures/chris/gap_36k/confusion.png)
+
+### What this changes
+
+- **Use ≥ 24k steps for the final Update #2 runs**, which is 2 epochs with `RESHUFFLE=True`. All the 12k comparisons in this update (word vs gap, LoRA, and the planned mBERT run) stay valid among themselves. A 36k number must not be compared with a 12k number from a different configuration.
+- **The 36k run is on version-1 labels**, like everything else started on 2026-11-03. Its version-2 re-score (0.761; Malay 0.672 → 0.712, Vietnamese 0.776 → 0.788) is an estimate from re-scoring, not a retrain.
+- **Still needed:** a second seed, at 12k or 24k, to put a seed interval on the +0.014.
+
 ## 2. Dual-head architecture
 
 *To be written (checklist item 1).*

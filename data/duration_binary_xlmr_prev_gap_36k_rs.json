@@ -1,0 +1,162 @@
+{
+ "tag": "xlmr_prev_gap_36k_rs",
+ "three_class_val_tuned": {
+  "accuracy": 0.6832808442455385,
+  "macro_f1": 0.6358421412770011,
+  "kappa": 0.4919862053233404,
+  "offsets": [
+   0.0,
+   0.2600000000000021,
+   -0.38999999999999846
+  ]
+ },
+ "two_class": {
+  "cut": 0.52,
+  "n": 180990,
+  "accuracy": 0.8167136305873253,
+  "macro_f1": 0.8165268346739869,
+  "macro_f1_ci": [
+   0.8144176221878424,
+   0.8184354427907178
+  ],
+  "per_class_f1": {
+   "short": 0.8106726022315441,
+   "large": 0.8223810671164298
+  },
+  "kappa": 0.6331172286813475,
+  "confusion": [
+   [
+    71021,
+    17777
+   ],
+   [
+    15396,
+    76796
+   ]
+  ],
+  "majority_macro_f1": 0.3374746505992342,
+  "share_large": 0.5093762086303111
+ },
+ "per_pair": {
+  "Arabic->English": {
+   "n": 4562,
+   "switch_f1": 0.8365343576611183,
+   "three_macro_f1": 0.6473908811011685,
+   "three_accuracy": 0.7341078474353354,
+   "two_macro_f1": 0.8206012998177519,
+   "two_accuracy": 0.8314335817623849
+  },
+  "Cantonese->English": {
+   "n": 100834,
+   "switch_f1": 0.7233064854519962,
+   "three_macro_f1": 0.6164226746916733,
+   "three_accuracy": 0.6613939742547157,
+   "two_macro_f1": 0.7977829198359754,
+   "two_accuracy": 0.79827240811631
+  },
+  "Chinese->English": {
+   "n": 5623,
+   "switch_f1": 0.8442728442728442,
+   "three_macro_f1": 0.6480680831353572,
+   "three_accuracy": 0.7531566779299307,
+   "two_macro_f1": 0.8315061715631926,
+   "two_accuracy": 0.8486573003734661
+  },
+  "French->English": {
+   "n": 4161,
+   "switch_f1": 0.8690095846645368,
+   "three_macro_f1": 0.6797429218995381,
+   "three_accuracy": 0.8204758471521268,
+   "two_macro_f1": 0.8482976853756123,
+   "two_accuracy": 0.8687815428983418
+  },
+  "German->English": {
+   "n": 3583,
+   "switch_f1": 0.8512820512820513,
+   "three_macro_f1": 0.6563833966320304,
+   "three_accuracy": 0.7800725648897572,
+   "two_macro_f1": 0.8388925937408389,
+   "two_accuracy": 0.8512419759977672
+  },
+  "German->French": {
+   "n": 4380,
+   "switch_f1": 0.7963335568969372,
+   "three_macro_f1": 0.6160476394919725,
+   "three_accuracy": 0.7189497716894977,
+   "two_macro_f1": 0.7927230137668038,
+   "two_accuracy": 0.8107305936073059
+  },
+  "Hindi->English": {
+   "n": 11487,
+   "switch_f1": 0.7749919380844889,
+   "three_macro_f1": 0.6180478140861936,
+   "three_accuracy": 0.6408113519630887,
+   "two_macro_f1": 0.7991279501753423,
+   "two_accuracy": 0.8713328110037434
+  },
+  "Italian->English": {
+   "n": 4252,
+   "switch_f1": 0.8383369208111475,
+   "three_macro_f1": 0.6772936914512929,
+   "three_accuracy": 0.79068673565381,
+   "two_macro_f1": 0.8327650859566194,
+   "two_accuracy": 0.8511288805268109
+  },
+  "Japanese->English": {
+   "n": 5377,
+   "switch_f1": 0.8791089377886443,
+   "three_macro_f1": 0.6674380258429823,
+   "three_accuracy": 0.8088153245304073,
+   "two_macro_f1": 0.8493414449875658,
+   "two_accuracy": 0.8755811790961503
+  },
+  "Korean->English": {
+   "n": 4916,
+   "switch_f1": 0.898797983714618,
+   "three_macro_f1": 0.6606985917770772,
+   "three_accuracy": 0.8039056143205858,
+   "two_macro_f1": 0.8508395272532476,
+   "two_accuracy": 0.870219690805533
+  },
+  "Malay->English": {
+   "n": 7151,
+   "switch_f1": 0.6717512032580526,
+   "three_macro_f1": 0.5874631563858227,
+   "three_accuracy": 0.6004754579779051,
+   "two_macro_f1": 0.7772193903113311,
+   "two_accuracy": 0.7958327506642427
+  },
+  "Philippines->English": {
+   "n": 9918,
+   "switch_f1": 0.7221780418206485,
+   "three_macro_f1": 0.5584164218334821,
+   "three_accuracy": 0.5813672111312764,
+   "two_macro_f1": 0.7128179306366986,
+   "two_accuracy": 0.7991530550514216
+  },
+  "Russian->English": {
+   "n": 4363,
+   "switch_f1": 0.7916574217883291,
+   "three_macro_f1": 0.6485364455024377,
+   "three_accuracy": 0.737107494842998,
+   "two_macro_f1": 0.818515312536108,
+   "two_accuracy": 0.8287875315150126
+  },
+  "Spanish->English": {
+   "n": 4562,
+   "switch_f1": 0.8403077896068305,
+   "three_macro_f1": 0.6788067957604927,
+   "three_accuracy": 0.7823323103901797,
+   "two_macro_f1": 0.8376320548616552,
+   "two_accuracy": 0.8553266111354669
+  },
+  "Vietnamese->English": {
+   "n": 5821,
+   "switch_f1": 0.7762942544577481,
+   "three_macro_f1": 0.654915141353079,
+   "three_accuracy": 0.7155127984882322,
+   "two_macro_f1": 0.82220504729056,
+   "two_accuracy": 0.8235698333619653
+  }
+ }
+}

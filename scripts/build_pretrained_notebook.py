@@ -81,6 +81,7 @@ EVAL_EVERY = 0          # >0: score a fixed val slice every N steps (learning cu
 # Tuning flags (all off = the baseline setup). See README "How models are evaluated".
 SEED = 0                # reproducible initialisation and data order
 DUR_WEIGHTS = "none"    # "balanced": class-weighted duration loss (weights from the train split)
+DUR_WEIGHT = 0.3        # lambda_2 in L = L_sw + lambda_2 * L_dur (0.3 = every run before 2026-11-10)
 DUR_HEAD = "softmax"    # "ordinal": cumulative cuts P(>Small), P(>Medium) (duration is ordered)
 TURN_SEP = False        # separator piece between speaker turns
 PREV_LANG = False       # input: the language of the last finished word
@@ -94,6 +95,7 @@ CONTEXT = None          # 1: read the current piece only, no prefix (needs the t
 PAIRS = ""              # comma-separated first languages to train and score on ("" = all 15),
                         # e.g. "Cantonese,Chinese,Japanese,Korean,Russian,Arabic"
 SAVE_CHECKPOINT = True  # 0.5-1.1 GB in /kaggle/working
+SUFFIX = ""             # appended to TAG, e.g. "_v2" so a rerun on new labels does not overwrite an old run's files
 LABELS_REPO = "CodeSwitchGroup4/switchlingua-tagged-final"
 """
 
@@ -163,7 +165,7 @@ common = (f"python scripts/train_anticipation.py --model {MODEL} --unit subword 
           f"--steps {steps} --batch-size {BATCH} --window {WINDOW} --stride {STRIDE} "
           f"--lr {LORA_LR if LORA_R else LR} --head-lr {HEAD_LR} --eval-batches {evalb} --workers 2 "
           f"--seed {SEED} --dur-class-weights {DUR_WEIGHTS} --dur-head {DUR_HEAD} --predict-at {PREDICT_AT} "
-          f"--decide-at {DECIDE_AT}"
+          f"--decide-at {DECIDE_AT} --dur-weight {DUR_WEIGHT}"
           + (" --turn-sep" if TURN_SEP else "") + (" --prev-lang" if PREV_LANG else "")
           + (" --pair-emb" if PAIR_EMB else "") + (f" --lora-r {LORA_R}" if LORA_R else "")
           + (f" --backbone {BACKBONE}" if BACKBONE else "")
@@ -175,9 +177,10 @@ TAG = MODEL + ("L" if "large" in BACKBONE else "") + "".join(s for s, on in (("_
                                       ("_prev", PREV_LANG), ("_pair", PAIR_EMB),
                                       (f"_lora{LORA_R}", bool(LORA_R)), ("_wend", PREDICT_AT == "word_end"),
                                       ("_gap", DECIDE_AT == "gap"),
+                                      (f"_dw{DUR_WEIGHT:g}", DUR_WEIGHT != 0.3),
                                       (f"_{STEPS // 1000}k", STEPS != 12_000), ("_rs", RESHUFFLE),
                                       (f"_ctx{CONTEXT}", bool(CONTEXT)),
-                                      (f"_{len(PAIRS.split(','))}pairs", bool(PAIRS))) if on)
+                                      (f"_{len(PAIRS.split(','))}pairs", bool(PAIRS))) if on) + SUFFIX
 if RUN_FULL:
     cmd = (f"{common}" + (f" --train-langs {PAIRS}" if PAIRS else "") + f" --out data/anticipation_{TAG}.json --ckpt models/anticipation_{TAG}.pt "
            f"--save-preds data/preds_{TAG}.npz")
