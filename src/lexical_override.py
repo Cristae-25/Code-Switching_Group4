@@ -5,7 +5,7 @@ human-annotated sets we have. It was never checked on Malay, Vietnamese or
 Tagalog, and there it tags common L1 function words English: Malay ``akan``
 ×1,496, ``dan``, ``yang``; Vietnamese ``và``, ``sẽ``, ``của``, even spans like
 "bekerjasama dengan agensi lain untuk". Each one invents two switches.
-``scripts/consensus_f1.py`` found 40-45% of the positions around such words
+``scripts/analysis/consensus_f1.py`` found 40-45% of the positions around such words
 labelled as switches, and the trained model refusing them (recall 0.16-0.18).
 
 Two rules, applied to word tokens that are not names:

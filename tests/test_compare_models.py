@@ -8,7 +8,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 def _mod():
     spec = importlib.util.spec_from_file_location(
-        "compare_models", os.path.join(ROOT, "scripts", "compare_models.py"))
+        "compare_models", os.path.join(ROOT, "scripts", "analysis", "compare_models.py"))
     m = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(m)
     return m

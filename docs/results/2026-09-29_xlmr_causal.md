@@ -7,7 +7,7 @@
 **Protocol:** the same as every model (`src/evaluation.py`). Train on the train split (`row_id % 10` in 0–7), tune the threshold on val (8; τ = 0.337, val F1 0.647), score test (9) once.
 
 **Files:**
-- [`2026-09-29_xlmr_causal.json`](2026-09-29_xlmr_causal.json) — the full results file, also at `data/anticipation_xlmr.json`.
+- [`2026-09-29_xlmr_causal.json`](2026-09-29_xlmr_causal.json) — the full results file, also at `data/results/anticipation_xlmr.json`.
 - [`2026-09-29_xlmr_causal_run2_per_pair.csv`](2026-09-29_xlmr_causal_run2_per_pair.csv) — the per-pair table of a second, independent training with the same settings, as the notebook printed it. The zero-shot Run All re-trains the full model first, so there were two runs.
 
 ## Switch prediction (`y_sw`), test split

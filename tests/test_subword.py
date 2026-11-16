@@ -108,7 +108,7 @@ def test_punctuation_pieces_are_none_and_words_keep_their_language(tok):
 
 def _case_texts():
     spec = importlib.util.spec_from_file_location(
-        "cns", os.path.join(ROOT, "scripts", "compare_name_strategies.py"))
+        "cns", os.path.join(ROOT, "scripts", "labelling", "compare_name_strategies.py"))
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return {cid: s for cid, _, _, s in mod.CASES}

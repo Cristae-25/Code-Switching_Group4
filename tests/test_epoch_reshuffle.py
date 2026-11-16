@@ -90,7 +90,7 @@ def test_persistent_workers_reshuffle_too(tmp_path):
 
 def _train_module():
     spec = importlib.util.spec_from_file_location("train_anticipation",
-                                                  os.path.join(ROOT, "scripts", "train_anticipation.py"))
+                                                  os.path.join(ROOT, "scripts", "training", "train_anticipation.py"))
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod

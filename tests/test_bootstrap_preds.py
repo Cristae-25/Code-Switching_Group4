@@ -11,7 +11,7 @@ from src.metrics import duration_scores, end_to_end_duration, prf
 def _mod():
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     spec = importlib.util.spec_from_file_location(
-        "bootstrap_preds", os.path.join(root, "scripts", "bootstrap_preds.py"))
+        "bootstrap_preds", os.path.join(root, "scripts", "analysis", "bootstrap_preds.py"))
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod

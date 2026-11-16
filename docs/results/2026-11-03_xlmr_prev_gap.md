@@ -21,7 +21,7 @@ The first upload of this TAG (07:54, kept as `data/BUGGED_*` and `logs/BUGGED_tr
 | `xlmr_prev` (decide at word) | 0.646 | 0.677 | 0.536 | 0.760 | 0.574 (0.606) | 0.477 | 0.332 |
 | `xlmr_prev_gap` (decide at gap) | **0.744** | **0.794** | **0.634** | **0.858** | **0.596 (0.624)** | **0.522** | 0.386 |
 
-Paired row bootstrap, `xlmr_prev_gap − xlmr_prev` (`scripts/bootstrap_preds.py xlmr_prev xlmr_prev_gap`):
+Paired row bootstrap, `xlmr_prev_gap − xlmr_prev` (`scripts/analysis/bootstrap_preds.py xlmr_prev xlmr_prev_gap`):
 - **switch F1:** +0.098 [+0.096, +0.100]
 - **duration macro-F1:** +0.022 [+0.020, +0.024]
 - **Medium F1:** +0.024 [+0.020, +0.028]
@@ -33,7 +33,7 @@ Per pair (switch F1, gap run): Korean 0.896, Japanese 0.872, French 0.859, Germa
 
 ## Where the gain comes from
 
-`scripts/gap_split.py xlmr_prev xlmr_prev_gap`:
+`scripts/analysis/gap_split.py xlmr_prev xlmr_prev_gap`:
 
 | Positions | n | Switch share | Word P / R / F1 | Gap P / R / F1 | Average precision (word → gap) |
 |---|---:|---:|---|---|---|
@@ -47,7 +47,7 @@ Per pair (switch F1, gap run): Korean 0.896, Japanese 0.872, French 0.859, Germa
 
 ## Decision
 
-**We are now deciding at the gap.** Each switch is predicted just before the next word, after any punctuation the writer has typed. Recorded in `docs/groupUpdate2.md`, §1. The notebook default is now `DECIDE_AT = "gap"`; `train_anticipation.py` still defaults to `word`, so earlier runs reproduce unchanged.
+**We are now deciding at the gap.** Each switch is predicted just before the next word, after any punctuation the writer has typed. Recorded in `docs/updates/groupUpdate2.md`, §1. The notebook default is now `DECIDE_AT = "gap"`; `train_anticipation.py` still defaults to `word`, so earlier runs reproduce unchanged.
 
 Consequences:
 - **Don't compare with Update #1's numbers as if they were like for like.** 0.744 (gap) and 0.646 (word) answer different questions: the gap run decides later, and is scored on a different set of positions.
@@ -57,6 +57,6 @@ Consequences:
 ## Reproducing
 
 ```bash
-./.venv/bin/python scripts/bootstrap_preds.py xlmr_prev xlmr_prev_gap
-./.venv/bin/python scripts/gap_split.py xlmr_prev xlmr_prev_gap
+./.venv/bin/python scripts/analysis/bootstrap_preds.py xlmr_prev xlmr_prev_gap
+./.venv/bin/python scripts/analysis/gap_split.py xlmr_prev xlmr_prev_gap
 ```

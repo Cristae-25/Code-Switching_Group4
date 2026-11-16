@@ -1,6 +1,6 @@
 import numpy as np
 
-from scripts.grammar_breakdown import freq_band, row_features
+from scripts.analysis.grammar_breakdown import freq_band, row_features
 from src.anticipation import L1, L2, NONE
 
 # "yo quiero the coche , pero no ."  ->  es es en es , es es .
@@ -39,7 +39,7 @@ def test_frequency_bands():
 
 
 def test_zipf_needs_no_tokenizer_and_reads_traditional_chinese():
-    from scripts.grammar_breakdown import zipf
+    from scripts.analysis.grammar_breakdown import zipf
     assert zipf("は", "ja") > 7 and zipf("는", "ko") > 7      # no MeCab needed
     assert zipf("們", "zh") == zipf("们", "zh") > 5             # traditional -> simplified
     assert zipf("qwxzv", "en") == 0.0

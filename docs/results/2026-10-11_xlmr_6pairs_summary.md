@@ -1,10 +1,10 @@
 # XLM-R on the 6 script-disjoint pairs: results and how they are measured (2026-10-11)
 
-A summary for the team. It pulls the 6 script-disjoint pairs (Cantonese, Chinese, Japanese, Korean, Russian, Arabic → English) out of the 2026-09-29 XLM-R run, then explains what the model sees, what it is scored on, and how the future is kept out. No new training was run; every number comes from [`2026-09-29_xlmr_causal.json`](2026-09-29_xlmr_causal.json) and [`data/baseline_anticipation_subword_6pairs.json`](../../data/baseline_anticipation_subword_6pairs.json).
+A summary for the team. It pulls the 6 script-disjoint pairs (Cantonese, Chinese, Japanese, Korean, Russian, Arabic → English) out of the 2026-09-29 XLM-R run, then explains what the model sees, what it is scored on, and how the future is kept out. No new training was run; every number comes from [`2026-09-29_xlmr_causal.json`](2026-09-29_xlmr_causal.json) and [`data/results/baseline_anticipation_subword_6pairs.json`](../../data/results/baseline_anticipation_subword_6pairs.json).
 
 **Why these 6:** they are `unicode`-routed, so each piece's language comes from its script, and the labels are exact by construction. Any error on them comes from the model, not the tagger.
 
-**Caveat:** this XLM-R model was trained on all 15 pairs, not just these 6. The matched 6-pair run (`xlmr_6pairs`) and the current-token run (`xlmr_ctx1_6pairs`) are queued in [`RUN_LOG.md`](../RUN_LOG.md).
+**Caveat:** this XLM-R model was trained on all 15 pairs, not just these 6. The matched 6-pair run (`xlmr_6pairs`) and the current-token run (`xlmr_ctx1_6pairs`) are queued.
 
 ## 1. Switch prediction (`y_sw`), per pair, test split
 
@@ -114,9 +114,9 @@ At t = 0 the model has never seen `meeting`. The label at t uses piece t+1; the 
 | Attention to future pieces | Causal mask in every XLM-R layer | `check_causality` rewrites every piece after t with random ids and asserts the logits at ≤ t do not move. It ran on the assembled model before training: **max drift 0.00** over 31 positions. |
 | A label used as an input | No language input on sub-word pieces at all, because a mid-word piece's language depends on pieces not yet read | By construction (`use_lang=False`) |
 | Normalisation across time | Only LayerNorm (per position), no BatchNorm | Covered by `check_causality` |
-| Tokenization seeing the future | The pieces come from tokenizing the whole text. Re-tokenizing `text[:end of piece t]` alone reproduces every stored piece, because unigram SentencePiece is prefix-consistent. | `scripts/audit_prefix_tokenization.py`: **0 of 2.68 M** scored pieces differ on these 6 pairs ([record](2026-10-06_current_token_xlmr.md)) |
+| Tokenization seeing the future | The pieces come from tokenizing the whole text. Re-tokenizing `text[:end of piece t]` alone reproduces every stored piece, because unigram SentencePiece is prefix-consistent. | `scripts/labelling/audit_prefix_tokenization.py`: **0 of 2.68 M** scored pieces differ on these 6 pairs ([record](2026-10-06_current_token_xlmr.md)) |
 | Same conversation in train and test | Row-level split (`row_id % 10`) | By construction |
-| Tuning on test | τ tuned on val only; test scored once | `scripts/train_anticipation.py` |
+| Tuning on test | τ tuned on val only; test scored once | `scripts/training/train_anticipation.py` |
 
 **Long conversations (windowing).** A row longer than 384 pieces is cut into overlapping windows with stride 288. In every window after the first, the first 96 pieces are context only: they are fed in but masked out of the loss and the scores. So every position is scored exactly once, always with at least 96 pieces of real prefix behind it. The visible prefix is capped at 384 pieces, not the whole conversation. That is a limit on how much past the model sees, not a leak from the future.
 

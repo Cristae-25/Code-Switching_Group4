@@ -329,7 +329,7 @@ def _train_script():
     import importlib.util, os
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     spec = importlib.util.spec_from_file_location(
-        "train_anticipation", os.path.join(root, "scripts", "train_anticipation.py"))
+        "train_anticipation", os.path.join(root, "scripts", "training", "train_anticipation.py"))
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
@@ -347,7 +347,7 @@ def test_subword_training_never_overwrites_the_word_model_by_default():
     mod = _train_script()
     word, sub = mod.resolve_defaults(_args()), mod.resolve_defaults(_args(unit="subword"))
     assert word.ckpt == "models/anticipation_word.pt"
-    assert word.out == "data/anticipation_word.json"          # what compare_models reads
+    assert word.out == "data/results/anticipation_word.json"          # what compare_models reads
     assert sub.ckpt != word.ckpt and sub.out != word.out
     assert (sub.window, sub.stride, sub.path) == (384, 288, "data/subword.parquet")
 
@@ -394,7 +394,7 @@ def test_xlmr_needs_subword_units_and_has_its_own_outputs():
     with pytest.raises(SystemExit):
         mod.resolve_defaults(_args(model="xlmr"))                # word units: refused
     a = mod.resolve_defaults(_args(model="xlmr", unit="subword"))
-    assert a.ckpt == "models/anticipation_xlmr.pt" and a.out == "data/anticipation_xlmr.json"
+    assert a.ckpt == "models/anticipation_xlmr.pt" and a.out == "data/results/anticipation_xlmr.json"
     assert a.lr == 2e-5 and a.window <= 512
     s = mod.resolve_defaults(_args())
     assert s.lr == 3e-4
@@ -414,7 +414,7 @@ def _baseline_script():
     import importlib.util, os
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     spec = importlib.util.spec_from_file_location(
-        "baseline_anticipation", os.path.join(root, "scripts", "baseline_anticipation.py"))
+        "baseline_anticipation", os.path.join(root, "scripts", "training", "baseline_anticipation.py"))
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
@@ -613,7 +613,7 @@ def test_current_token_runs_get_their_own_outputs():
     mod = _train_script()
     a = mod.resolve_defaults(_args(model="xlmr", unit="subword", context=1))
     assert a.ckpt == "models/anticipation_xlmr_ctx1.pt"
-    assert a.out == "data/anticipation_xlmr_ctx1.json"
+    assert a.out == "data/results/anticipation_xlmr_ctx1.json"
     b = mod.resolve_defaults(_args(model="xlmr", unit="subword", context=1, ckpt="x.pt"))
     assert b.ckpt == "x.pt"                                     # an explicit path wins
 

@@ -6,7 +6,7 @@
 - **Trained on 10 first languages:** Cantonese, Arabic, Tagalog (Philippines), Chinese, Vietnamese, Malay, Japanese, Russian, Spanish, French.
 - **Held out entirely:** Korean, Italian, Hindi and German, which gives five pairs, since German has both English and French as its second language.
 - **Threshold:** tuned on the validation split of the trained pairs only (τ = 0.358), then applied unchanged to the held-out test pairs.
-- **Results file:** [`2026-09-29_xlmr_causal_zeroshot.json`](2026-09-29_xlmr_causal_zeroshot.json), also at `data/anticipation_xlmr_zeroshot.json`.
+- **Results file:** [`2026-09-29_xlmr_causal_zeroshot.json`](2026-09-29_xlmr_causal_zeroshot.json), also at `data/results/anticipation_xlmr_zeroshot.json`.
 
 ## Held-out pairs (never seen in training), test split
 

@@ -413,7 +413,7 @@ def _review_module():
     import importlib.util
     import os
     path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                        "scripts", "review_server.py")
+                        "scripts", "labelling", "review_server.py")
     spec = importlib.util.spec_from_file_location("review_server", path)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)

@@ -16,7 +16,7 @@ Can a model predict that a speaker is **about to switch language** before it hap
 | Baselines + from-scratch causal transformer, words and pieces | ✅ done: switch F1 **0.513** (words) / **0.453** (pieces), against 0.329 / 0.266 for the best training-free baseline (per-pair hazard). See [`docs/model_comparison.md`](docs/model_comparison.md) |
 | XLM-R with a causal mask | ✅ trained on Kaggle: switch F1 **0.646** (pieces), macro-F1 0.676, into L2 0.536, duration accuracy 0.678, better than the from-scratch model on all 15 pairs; 4 pairs above 0.7. Zero-shot on 4 held-out languages: F1 **0.625**. mBERT: 0.634 (zero-shot 0.565). See [`docs/results/`](docs/results/) |
 
-The course schedule and pace are in [`docs/TIMELINE.md`](docs/TIMELINE.md).
+The course schedule and pace are in [`docs/team/TIMELINE.md`](docs/team/TIMELINE.md).
 
 ## Setup
 
@@ -43,8 +43,8 @@ HF_TOKEN=hf_...
 The labels are ready-made: every token already has its switch and duration targets. They live in the private Hugging Face dataset `CodeSwitchGroup4/switchlingua-tagged-final` (never in git: the corpus is gated). With `HF_TOKEN` in `.env`:
 
 ```bash
-./.venv/bin/python scripts/download_labels.py          # -> data/final/token_labels_{word,subword}.parquet
-./.venv/bin/python scripts/download_labels.py --all    # also the word-language files + data/tagged.parquet
+./.venv/bin/python scripts/labelling/download_labels.py          # -> data/final/token_labels_{word,subword}.parquet
+./.venv/bin/python scripts/labelling/download_labels.py --all    # also the word-language files + data/tagged.parquet
 ```
 
 | File | One row per conversation; lists aligned to its… |
@@ -81,8 +81,8 @@ With the defaults it reproduces the two files above. It needs no GPU, and it als
 
 ```bash
 ./.venv/bin/hf download Shelton1013/SwitchLingua_text --repo-type dataset --token "$HF_TOKEN"
-./.venv/bin/python scripts/build_subword.py            # -> data/subword.parquet (~3 min CPU)
-./.venv/bin/python scripts/export_token_labels.py      # -> data/final/token_labels_*.parquet
+./.venv/bin/python scripts/labelling/build_subword.py            # -> data/subword.parquet (~3 min CPU)
+./.venv/bin/python scripts/labelling/export_token_labels.py      # -> data/final/token_labels_*.parquet
 ```
 
 ## What the labels look like
@@ -113,19 +113,19 @@ piece          lang  y_sw  y_len  y_dur
 
 ```bash
 ./.venv/bin/python -m pytest tests/ -q                   # 309 tests
-./.venv/bin/python scripts/shuffle_parquet.py            # -> data/tagged_shuffled.parquet (train on this)
-./.venv/bin/python scripts/baseline_anticipation.py      # training-free baselines, ~4 min
-./.venv/bin/python scripts/train_anticipation.py --build-vocab --path data/tagged_shuffled.parquet --steps 6000   # ~23 min on an M3
-./.venv/bin/python scripts/baseline_anticipation.py --unit subword                    # the same baselines on XLM-R pieces
-./.venv/bin/python scripts/train_anticipation.py --unit subword --build-vocab --steps 6000   # pieces only, no language input (~35 min)
-./.venv/bin/python scripts/train_anticipation.py --model xlmr --unit subword --steps 12000 --batch-size 16  # GPU: use kaggle/train_pretrained.ipynb
-./.venv/bin/python scripts/compare_models.py                                         # -> docs/model_comparison.md
-./.venv/bin/python scripts/eval_anticipation_pair.py --ckpt models/anticipation_zeroshot.pt --l1 German --l2 French
-./.venv/bin/python scripts/eval_public.py                # taggers vs human-annotated LinCE / Denglisch
-./.venv/bin/python scripts/review_server.py              # spot-check UI for the labels (report-only)
+./.venv/bin/python scripts/labelling/shuffle_parquet.py            # -> data/tagged_shuffled.parquet (train on this)
+./.venv/bin/python scripts/training/baseline_anticipation.py      # training-free baselines, ~4 min
+./.venv/bin/python scripts/training/train_anticipation.py --build-vocab --path data/tagged_shuffled.parquet --steps 6000   # ~23 min on an M3
+./.venv/bin/python scripts/training/baseline_anticipation.py --unit subword                    # the same baselines on XLM-R pieces
+./.venv/bin/python scripts/training/train_anticipation.py --unit subword --build-vocab --steps 6000   # pieces only, no language input (~35 min)
+./.venv/bin/python scripts/training/train_anticipation.py --model xlmr --unit subword --steps 12000 --batch-size 16  # GPU: use kaggle/train_pretrained.ipynb
+./.venv/bin/python scripts/analysis/compare_models.py                                         # -> docs/model_comparison.md
+./.venv/bin/python scripts/training/eval_anticipation_pair.py --ckpt models/anticipation_zeroshot.pt --l1 German --l2 French
+./.venv/bin/python scripts/labelling/eval_public.py                # taggers vs human-annotated LinCE / Denglisch
+./.venv/bin/python scripts/labelling/review_server.py              # spot-check UI for the labels (report-only)
 ```
 
-Re-labelling the corpus from scratch needs a GPU (the AnE-NER and AnE-LID passes). Use `kaggle/label_switchlingua.ipynb` (T4×2). Locally, `scripts/run_tagging.py` does the same thing but slowly. After changing `src/`, regenerate the notebooks with `scripts/build_kaggle_notebook.py` and `scripts/build_labels_notebook.py`.
+Re-labelling the corpus from scratch needs a GPU (the AnE-NER and AnE-LID passes). Use `kaggle/label_switchlingua.ipynb` (T4×2). Locally, `scripts/labelling/run_tagging.py` does the same thing but slowly. After changing `src/`, regenerate the notebooks with `scripts/notebooks/build_kaggle_notebook.py` and `scripts/notebooks/build_labels_notebook.py`.
 
 ## How models are evaluated
 
@@ -136,7 +136,7 @@ Every model is trained and scored the same way, so the results are directly comp
 3. **The report** (`src/evaluation.py`):
    - Switch precision, recall and F1, with 95% intervals. Overall, **per language pair** (German→French kept apart), macro-averaged across pairs, and **per direction** (into L2 vs back into L1).
    - Duration: 3-class accuracy, macro-F1 and a confusion matrix, at the true switch points whose class is certain.
-4. **Compare.** `scripts/compare_models.py` puts every result file side by side, overall and pair by pair → [`docs/model_comparison.md`](docs/model_comparison.md).
+4. **Compare.** `scripts/analysis/compare_models.py` puts every result file side by side, overall and pair by pair → [`docs/model_comparison.md`](docs/model_comparison.md).
 
 | Baseline | What it knows |
 |---|---|
@@ -149,7 +149,7 @@ Every model is trained and scored the same way, so the results are directly comp
 **Training the pretrained models (XLM-R, RoBERTa, mBERT) on Kaggle.**
 1. Upload `kaggle/train_pretrained.ipynb`, set `MODEL` (`"xlmr"`, `"roberta"` or `"mbert"`), choose GPU T4 ×2, turn Internet on, and add the `HF_TOKEN` secret.
 2. Run All. Try `SMOKE = True` first.
-3. Download `data/anticipation_<MODEL>.json` from the Output tab into `data/`, then run `./.venv/bin/python scripts/compare_models.py`.
+3. Download `data/results/anticipation_<MODEL>.json` from the Output tab into `data/results/`, then run `./.venv/bin/python scripts/analysis/compare_models.py`.
 
 ## Repo layout
 
@@ -165,26 +165,33 @@ src/          library code
   streaming.py, causal_model.py, metrics.py        dataloader, causal transformer, metrics
   xlmr_model.py, models.py                         XLM-R with a causal mask; build either model
   evaluation.py                                    the one evaluation report every model uses
-scripts/      command-line entry points (see "Common commands")
+scripts/      command-line entry points (see "Common commands"), by stage:
+  labelling/    tag the corpus, names policy, label-quality evals, subword/shuffle/export, HF up/download
+  training/     train_anticipation, baseline_anticipation, eval_anticipation_pair
+  analysis/     compare_models, bootstrap, breakdowns, offline threshold/duration tuning
+  plots/        figures for docs/figures/
+  notebooks/    builders for kaggle/*.ipynb and notebooks/switch_eda.ipynb
 tests/        pytest suite; fixtures/ holds frozen model outputs for the name edge cases
 kaggle/       load_labels.ipynb: download our labels, choose word/sub-word + names policy (CPU)
               train_pretrained.ipynb: fine-tune and evaluate causal XLM-R / RoBERTa / mBERT (GPU)
               untrained_xlmr.ipynb: XLM-R without fine-tuning (random heads; linear probe) (GPU)
               label_switchlingua.ipynb: re-label the corpus from scratch (GPU, T4x2)
 notebooks/    switch_eda.ipynb: when switches happen and how long they last, by pair and persona
-docs/         write-ups (start here)
-data/         local only: small result JSONs are tracked, everything else is gitignored
+docs/         technical write-ups (start here); results/ dated run records, pairs/ per-pair pages,
+              updates/ group updates + meeting notes, team/ plan, timeline, run log, figures/
+data/         local only, gitignored except results/ (the small result JSONs);
+              preds/<TAG>[.npz] saved predictions, kaggle_runs/ raw Kaggle downloads
 ```
 
 ## Read next
 
-**Working on the project?** Start with [`docs/TEAM_PLAN.md`](docs/TEAM_PLAN.md) (who owns which language pairs, and the milestones) and [`CONTRIBUTING.md`](CONTRIBUTING.md) (setup, git workflow, how to report a result). Each pair has a page in [`docs/pairs/`](docs/pairs/), and Kaggle runs are logged in [`docs/RUN_LOG.md`](docs/RUN_LOG.md).
+**Working on the project?** Start with [`CONTRIBUTING.md`](CONTRIBUTING.md) (setup, git workflow, how to report a result) and the milestones in [`docs/team/TIMELINE.md`](docs/team/TIMELINE.md). Each pair has a page in [`docs/pairs/`](docs/pairs/).
 
 1. [`docs/labelling_models.md`](docs/labelling_models.md): which model labelled which pair, its accuracy on human-annotated data, and how names are handled.
-2. [`docs/groupUpdate1.md`](docs/groupUpdate1.md): the anticipation task. It covers objectives, the held-out design, causal constraints, baselines, results, and next steps.
+2. [`docs/updates/groupUpdate1.md`](docs/updates/groupUpdate1.md): the anticipation task. It covers objectives, the held-out design, causal constraints, baselines, results, and next steps.
 3. [`docs/labelling_pipeline.md`](docs/labelling_pipeline.md): the full history of the labels. It covers every tagger tried, its accuracy, and why it was kept or rejected.
 4. [`notebooks/switch_eda.ipynb`](notebooks/switch_eda.ipynb): exploratory analysis of the labels: switch timing (hazard curves), duration classes, and persona and style effects, all per pair. It renders on GitHub.
-5. [`docs/TIMELINE.md`](docs/TIMELINE.md): course milestones and pace.
+5. [`docs/team/TIMELINE.md`](docs/team/TIMELINE.md): course milestones and pace.
 
 ## Ground rules
 

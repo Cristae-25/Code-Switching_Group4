@@ -161,7 +161,7 @@ def _train_script():
     import importlib.util, os
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     spec = importlib.util.spec_from_file_location(
-        "train_anticipation", os.path.join(root, "scripts", "train_anticipation.py"))
+        "train_anticipation", os.path.join(root, "scripts", "training", "train_anticipation.py"))
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod

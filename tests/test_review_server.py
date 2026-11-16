@@ -1,5 +1,5 @@
 """The review page shows each token as the training labels count it (names resolved)."""
-from scripts.review_server import counted_labels
+from scripts.labelling.review_server import counted_labels
 
 
 def test_opaque_name_shows_its_clause_language_not_other():

@@ -2,7 +2,7 @@
 
 **Why:** to test the idea that punctuation signals an upcoming switch. A switch label sits on the last language-bearing piece *before* any punctuation (`anticipatory_labels`, where NONE slots are transparent). In `I went home, 然后…` the decision is made at `home`, and the causal model has not seen the comma yet. So the punctuation right at a switch is currently invisible to the model.
 
-**How:** `./.venv/bin/python scripts/punct_breakdown.py xlmr_6pairs` (9 s). Every labelled position is bucketed by what lies between it and the next language-bearing piece:
+**How:** `./.venv/bin/python scripts/analysis/punct_breakdown.py xlmr_6pairs` (9 s). Every labelled position is bucketed by what lies between it and the next language-bearing piece:
 - `turn`: a new utterance starts
 - `sentence_end`: . ! ? 。 ！ ？ …
 - `comma`: , ; : 、 ， ；
@@ -12,7 +12,7 @@
 - **Part A** covers the labels on all splits.
 - **Part B** scores the `xlmr_6pairs` test predictions at the run's own τ = 0.377. Its pooled F1 (0.6452) matches the run's json.
 
-Output: `data/punct_breakdown_xlmr_6pairs.json`.
+Output: `data/results/punct_breakdown_xlmr_6pairs.json`.
 
 ## Part A: where switches happen (all 15 pairs, 18.2 M positions)
 

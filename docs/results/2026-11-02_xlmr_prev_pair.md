@@ -17,7 +17,7 @@ There is no seed-0 no-flag baseline with saved predictions. The reference is the
 | `xlmr_prev` | 0.6461 | 0.6765 | 0.7259 | 0.574 | 0.332 |
 | `xlmr_pair` | 0.6460 | 0.6766 | 0.7266 | 0.573 | 0.371 |
 
-Paired row bootstrap, `xlmr_pair − xlmr_prev` (`scripts/bootstrap_preds.py xlmr_prev xlmr_pair`):
+Paired row bootstrap, `xlmr_pair − xlmr_prev` (`scripts/analysis/bootstrap_preds.py xlmr_prev xlmr_pair`):
 - **switch F1:** −0.000 [−0.001, +0.001]
 - **duration macro-F1:** −0.001 [−0.002, +0.001]
 
@@ -33,5 +33,5 @@ Per pair, every switch-F1 difference is within ±0.006. The end-to-end duration 
 
 ## Breakdowns on 15 pairs (`xlmr_prev`)
 
-- **Punctuation** (`scripts/punct_breakdown.py xlmr_prev`): the same as on the 6 pairs. Mid-clause F1 0.467, and 37.4 k of about 62.8 k misses. Comma 0.667, sentence end 0.840, turn 0.869. Latin pairs are weakest mid-clause (German→French 0.17, French→English 0.20). Hindi (0.66) and Philippines (0.61) are strongest, because most of their switches are mid-clause.
-- **Grammar** (`scripts/grammar_breakdown.py xlmr_prev`): the same conclusion. In every group the model's mean probability tracks the base rate, or sits above it. 82% of mid-clause misses are switches out of L1 (F1 0.31). In the European Latin pairs the model *over*-predicts after mid-frequency content words (e.g. Spanish 0.040 actual vs 0.107 predicted), so function words are not a missed cue there. The only under-predicted groups are rare words in Malay (0.43 vs 0.23) and Vietnamese (0.41 vs 0.24). They are about 550 misses, about 1% of all, and plausibly tagger noise (an English word tagged L1).
+- **Punctuation** (`scripts/analysis/punct_breakdown.py xlmr_prev`): the same as on the 6 pairs. Mid-clause F1 0.467, and 37.4 k of about 62.8 k misses. Comma 0.667, sentence end 0.840, turn 0.869. Latin pairs are weakest mid-clause (German→French 0.17, French→English 0.20). Hindi (0.66) and Philippines (0.61) are strongest, because most of their switches are mid-clause.
+- **Grammar** (`scripts/analysis/grammar_breakdown.py xlmr_prev`): the same conclusion. In every group the model's mean probability tracks the base rate, or sits above it. 82% of mid-clause misses are switches out of L1 (F1 0.31). In the European Latin pairs the model *over*-predicts after mid-frequency content words (e.g. Spanish 0.040 actual vs 0.107 predicted), so function words are not a missed cue there. The only under-predicted groups are rare words in Malay (0.43 vs 0.23) and Vietnamese (0.41 vs 0.24). They are about 550 misses, about 1% of all, and plausibly tagger noise (an English word tagged L1).

@@ -56,6 +56,24 @@ DUR_EDGES = (2, 6)                     # inclusive upper bounds of small, medium
 DUR_LABELS = ["small", "medium", "large"]
 N_DUR = len(DUR_LABELS)
 LARGE_MIN = DUR_EDGES[-1] + 1          # a cut-off run this long is certainly large
+# Two-class view (--dur-classes 2): Short = Small + Medium (1-6) vs Large (7+).
+# The scored positions are the same: a cut-off run is certain only once it is 7+.
+BINARY_LABELS = ["short", "large"]
+
+
+def dur_labels(n_classes: int) -> list[str]:
+    """Class names for a duration head with ``n_classes`` outputs (3 or 2)."""
+    return {len(DUR_LABELS): DUR_LABELS, 2: BINARY_LABELS}[n_classes]
+
+
+def collapse_duration(y_dur):
+    """3-class ``y_dur`` -> Short (0) / Large (1); -1 (no label) stays -1.
+
+    Works on a numpy array or a torch tensor and returns the same type.
+    """
+    large = y_dur == N_DUR - 1
+    out = (y_dur >= 0) * 1 - 1 + large * 1      # -1 -> -1, small/medium -> 0, large -> 1
+    return out.astype(y_dur.dtype) if hasattr(out, "astype") else out.to(y_dur.dtype)
 
 def is_word(token: str) -> bool:
     """A token counts toward a run only if it contains a letter."""

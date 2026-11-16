@@ -1,0 +1,191 @@
+{
+ "steps": 3000,
+ "smoke": false,
+ "dur_classes": 2,
+ "selection": "mean of val switch F1 and val duration macro-F1",
+ "best": "xlmr_prev_gap_bin_dw0.3_3k",
+ "rows": [
+  {
+   "run": "binary head, \u03bb_dur=0",
+   "tag": "xlmr_prev_gap_bin_dw0_3k",
+   "dur_weight": 0.0,
+   "val_switch_f1": 0.7277175174975951,
+   "test_switch_f1": 0.7275350839050249,
+   "test_switch_p": 0.7652816864479365,
+   "test_switch_r": 0.6933370637048925,
+   "test_switch_macro_f1": 0.7824128151394186,
+   "val_switch_loss": 0.14345557676584245,
+   "val_dur_loss": 0.6389128565788269,
+   "val_dur_macro_f1": 0.6828118073617024,
+   "test_dur_macro_f1": 0.6814442398991774,
+   "test_dur_acc": 0.6814442919139138,
+   "short_f1": 0.6813155169644983,
+   "large_f1": 0.6815729628338563,
+   "kappa": 0.36314039445082674,
+   "cut": NaN,
+   "val_score": 0.7052646624296488
+  },
+  {
+   "run": "binary head, \u03bb_dur=0.3",
+   "tag": "xlmr_prev_gap_bin_dw0.3_3k",
+   "dur_weight": 0.3,
+   "val_switch_f1": 0.72408531528842,
+   "test_switch_f1": 0.7233118241485793,
+   "test_switch_p": 0.7600662944870901,
+   "test_switch_r": 0.6899480563356489,
+   "test_switch_macro_f1": 0.7795458234651149,
+   "val_switch_loss": 0.14526017936993096,
+   "val_dur_loss": 0.4110993444919586,
+   "val_dur_macro_f1": 0.8043290089021501,
+   "test_dur_macro_f1": 0.8029080405609701,
+   "test_dur_acc": 0.8031064564697546,
+   "short_f1": 0.7966545471176053,
+   "large_f1": 0.809161534004335,
+   "kappa": 0.60586767941522,
+   "cut": NaN,
+   "val_score": 0.764207162095285
+  },
+  {
+   "run": "binary head, \u03bb_dur=0.5",
+   "tag": "xlmr_prev_gap_bin_dw0.5_3k",
+   "dur_weight": 0.5,
+   "val_switch_f1": 0.719862890630399,
+   "test_switch_f1": 0.719774743346955,
+   "test_switch_p": 0.756829614793423,
+   "test_switch_r": 0.6861789733735932,
+   "test_switch_macro_f1": 0.7769741979809087,
+   "val_switch_loss": 0.14759346353326636,
+   "val_dur_loss": 0.4098410904407501,
+   "val_dur_macro_f1": 0.8061327556581174,
+   "test_dur_macro_f1": 0.8037753143036716,
+   "test_dur_acc": 0.8040862191125675,
+   "short_f1": 0.795964603810567,
+   "large_f1": 0.8115860247967761,
+   "kappa": 0.6077002246751346,
+   "cut": NaN,
+   "val_score": 0.7629978231442582
+  },
+  {
+   "run": "binary head, \u03bb_dur=1",
+   "tag": "xlmr_prev_gap_bin_dw1_3k",
+   "dur_weight": 1.0,
+   "val_switch_f1": 0.7081932773109244,
+   "test_switch_f1": 0.7079753377760789,
+   "test_switch_p": 0.7447640470390788,
+   "test_switch_r": 0.6746500137249519,
+   "test_switch_macro_f1": 0.7669604098915266,
+   "val_switch_loss": 0.15410911766803315,
+   "val_dur_loss": 0.4120044708251953,
+   "val_dur_macro_f1": 0.8037768704588504,
+   "test_dur_macro_f1": 0.8026351864636883,
+   "test_dur_acc": 0.802790939686476,
+   "short_f1": 0.7970908013965065,
+   "large_f1": 0.80817957153087,
+   "kappa": 0.6052944017978928,
+   "cut": NaN,
+   "val_score": 0.7559850738848874
+  },
+  {
+   "run": "binary head, \u03bb_dur=2",
+   "tag": "xlmr_prev_gap_bin_dw2_3k",
+   "dur_weight": 2.0,
+   "val_switch_f1": 0.698052549377341,
+   "test_switch_f1": 0.6978257916607757,
+   "test_switch_p": 0.734781923371066,
+   "test_switch_r": 0.6644090880297303,
+   "test_switch_macro_f1": 0.7584686297347552,
+   "val_switch_loss": 0.15954695132486926,
+   "val_dur_loss": 0.4125230312347412,
+   "val_dur_macro_f1": 0.8040863662270006,
+   "test_dur_macro_f1": 0.8027051661138511,
+   "test_dur_acc": 0.8030566380302896,
+   "short_f1": 0.7943778860435413,
+   "large_f1": 0.8110324461841609,
+   "kappa": 0.6056000803152386,
+   "cut": NaN,
+   "val_score": 0.7510694578021708
+  },
+  {
+   "run": "3-class head merged, \u03bb_dur=0.3",
+   "tag": "xlmr_prev_gap_3class_dw0.3_3k",
+   "dur_weight": 0.3,
+   "val_switch_f1": 0.7226505164869489,
+   "test_switch_f1": 0.7221750165373662,
+   "test_switch_p": 0.7590869684116206,
+   "test_switch_r": 0.6886864165206191,
+   "test_switch_macro_f1": 0.7781510099716445,
+   "val_switch_loss": 0.14594597514243077,
+   "val_dur_loss": 0.7034882307052612,
+   "val_dur_macro_f1": 0.8051591501719955,
+   "test_dur_macro_f1": 0.8032517192418153,
+   "test_dur_acc": 0.8035216101319635,
+   "short_f1": 0.7959647055442186,
+   "large_f1": 0.8105387329394119,
+   "kappa": 0.6066138873233358,
+   "cut": 0.5,
+   "val_score": 0.7639048333294722
+  }
+ ],
+ "confusions": {
+  "xlmr_prev_gap_bin_dw0_3k": [
+   [
+    61517,
+    26978
+   ],
+   [
+    30571,
+    61590
+   ]
+  ],
+  "xlmr_prev_gap_bin_dw0.3_3k": [
+   [
+    69677,
+    18818
+   ],
+   [
+    16752,
+    75409
+   ]
+  ],
+  "xlmr_prev_gap_bin_dw0.5_3k": [
+   [
+    69036,
+    19459
+   ],
+   [
+    15934,
+    76227
+   ]
+  ],
+  "xlmr_prev_gap_bin_dw1_3k": [
+   [
+    69977,
+    18518
+   ],
+   [
+    17109,
+    75052
+   ]
+  ],
+  "xlmr_prev_gap_bin_dw2_3k": [
+   [
+    68726,
+    19769
+   ],
+   [
+    15810,
+    76351
+   ]
+  ],
+  "xlmr_prev_gap_3class_dw0.3_3k": [
+   [
+    69235,
+    19260
+   ],
+   [
+    16235,
+    75926
+   ]
+  ]
+ }
+}

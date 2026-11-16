@@ -1,6 +1,6 @@
 import numpy as np
 
-from scripts.punct_breakdown import ADJ, COMMA, NO_LABEL, OTHER, SENT, TURN, gap_buckets
+from scripts.analysis.punct_breakdown import ADJ, COMMA, NO_LABEL, OTHER, SENT, TURN, gap_buckets
 from src.anticipation import L1, L2, NONE
 
 

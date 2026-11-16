@@ -1,0 +1,554 @@
+{
+ "units": "words; per character for Chinese, Japanese, Korean, Cantonese",
+ "labels": "data/final/token_labels_word.parquet (version 2)",
+ "total": {
+  "conversations": 234172,
+  "tokens_all": 22349157,
+  "words": 19600127,
+  "scored": 19365955,
+  "switches": 1892224,
+  "switch_rate": 0.0977,
+  "share_into_l2": 0.5428,
+  "switch_punct": 0.5895
+ },
+ "per_pair": {
+  "Japanese": {
+   "conversations": 8385,
+   "conv_share": 0.0358,
+   "word": 955997,
+   "word_share": 0.0488,
+   "scored": 947612,
+   "sw": 55896,
+   "switch_rate": 0.059,
+   "p_into_l2": 0.0424,
+   "p_into_l1": 0.1178,
+   "l2_share": 0.2197,
+   "l2_run_median": 4.0,
+   "l2_run_mean": 6.3408,
+   "l1_run_median": 22.0,
+   "switch_punct": 0.7933,
+   "nonswitch_punct": 0.0342
+  },
+  "Korean": {
+   "conversations": 8266,
+   "conv_share": 0.0353,
+   "word": 732203,
+   "word_share": 0.0374,
+   "scored": 723937,
+   "sw": 52236,
+   "switch_rate": 0.0722,
+   "p_into_l2": 0.0533,
+   "p_into_l1": 0.1356,
+   "l2_share": 0.2294,
+   "l2_run_median": 3.0,
+   "l2_run_mean": 5.2729,
+   "l1_run_median": 18.0,
+   "switch_punct": 0.7804,
+   "nonswitch_punct": 0.0171
+  },
+  "Chinese": {
+   "conversations": 8458,
+   "conv_share": 0.0361,
+   "word": 819886,
+   "word_share": 0.0418,
+   "scored": 811428,
+   "sw": 58833,
+   "switch_rate": 0.0725,
+   "p_into_l2": 0.0551,
+   "p_into_l1": 0.1217,
+   "l2_share": 0.2614,
+   "l2_run_median": 4.0,
+   "l2_run_mean": 6.1805,
+   "l1_run_median": 16.0,
+   "switch_punct": 0.7876,
+   "nonswitch_punct": 0.0437
+  },
+  "Cantonese": {
+   "conversations": 119248,
+   "conv_share": 0.5092,
+   "word": 12317971,
+   "word_share": 0.6285,
+   "scored": 12198723,
+   "sw": 1050873,
+   "switch_rate": 0.0861,
+   "p_into_l2": 0.0558,
+   "p_into_l1": 0.2252,
+   "l2_share": 0.1793,
+   "l2_run_median": 2.0,
+   "l2_run_mean": 3.6722,
+   "l1_run_median": 13.0,
+   "switch_punct": 0.5583,
+   "nonswitch_punct": 0.0837
+  },
+  "Vietnamese": {
+   "conversations": 8457,
+   "conv_share": 0.0361,
+   "word": 574495,
+   "word_share": 0.0293,
+   "scored": 566038,
+   "sw": 60222,
+   "switch_rate": 0.1064,
+   "p_into_l2": 0.083,
+   "p_into_l1": 0.1649,
+   "l2_share": 0.2859,
+   "l2_run_median": 2.0,
+   "l2_run_mean": 4.4273,
+   "l1_run_median": 11.0,
+   "switch_punct": 0.6398,
+   "nonswitch_punct": 0.0354
+  },
+  "Spanish": {
+   "conversations": 8110,
+   "conv_share": 0.0346,
+   "word": 445461,
+   "word_share": 0.0227,
+   "scored": 437351,
+   "sw": 46939,
+   "switch_rate": 0.1073,
+   "p_into_l2": 0.0917,
+   "p_into_l1": 0.1388,
+   "l2_share": 0.3324,
+   "l2_run_median": 3.0,
+   "l2_run_mean": 5.1496,
+   "l1_run_median": 9.0,
+   "switch_punct": 0.7845,
+   "nonswitch_punct": 0.0433
+  },
+  "Italian": {
+   "conversations": 7979,
+   "conv_share": 0.0341,
+   "word": 428908,
+   "word_share": 0.0219,
+   "scored": 420929,
+   "sw": 45478,
+   "switch_rate": 0.108,
+   "p_into_l2": 0.0975,
+   "p_into_l1": 0.1267,
+   "l2_share": 0.3611,
+   "l2_run_median": 4.0,
+   "l2_run_mean": 5.4904,
+   "l1_run_median": 9.0,
+   "switch_punct": 0.7864,
+   "nonswitch_punct": 0.0442
+  },
+  "French": {
+   "conversations": 8070,
+   "conv_share": 0.0345,
+   "word": 423592,
+   "word_share": 0.0216,
+   "scored": 415522,
+   "sw": 45367,
+   "switch_rate": 0.1092,
+   "p_into_l2": 0.096,
+   "p_into_l1": 0.1342,
+   "l2_share": 0.3441,
+   "l2_run_median": 4.0,
+   "l2_run_mean": 5.2026,
+   "l1_run_median": 9.0,
+   "switch_punct": 0.8172,
+   "nonswitch_punct": 0.048
+  },
+  "German → English": {
+   "conversations": 6819,
+   "conv_share": 0.0291,
+   "word": 333115,
+   "word_share": 0.017,
+   "scored": 326296,
+   "sw": 38940,
+   "switch_rate": 0.1193,
+   "p_into_l2": 0.106,
+   "p_into_l1": 0.1437,
+   "l2_share": 0.3533,
+   "l2_run_median": 3.0,
+   "l2_run_mean": 4.8689,
+   "l1_run_median": 8.0,
+   "switch_punct": 0.8063,
+   "nonswitch_punct": 0.0657
+  },
+  "German → French": {
+   "conversations": 8511,
+   "conv_share": 0.0363,
+   "word": 405653,
+   "word_share": 0.0207,
+   "scored": 397142,
+   "sw": 47895,
+   "switch_rate": 0.1206,
+   "p_into_l2": 0.1142,
+   "p_into_l1": 0.1303,
+   "l2_share": 0.397,
+   "l2_run_median": 4.0,
+   "l2_run_mean": 5.4975,
+   "l1_run_median": 8.0,
+   "switch_punct": 0.7229,
+   "nonswitch_punct": 0.0757
+  },
+  "Russian": {
+   "conversations": 8017,
+   "conv_share": 0.0342,
+   "word": 376909,
+   "word_share": 0.0192,
+   "scored": 368892,
+   "sw": 46348,
+   "switch_rate": 0.1256,
+   "p_into_l2": 0.117,
+   "p_into_l1": 0.1393,
+   "l2_share": 0.3879,
+   "l2_run_median": 3.0,
+   "l2_run_mean": 5.0539,
+   "l1_run_median": 7.0,
+   "switch_punct": 0.7247,
+   "nonswitch_punct": 0.0841
+  },
+  "Arabic": {
+   "conversations": 8548,
+   "conv_share": 0.0365,
+   "word": 385384,
+   "word_share": 0.0197,
+   "scored": 376836,
+   "sw": 48527,
+   "switch_rate": 0.1288,
+   "p_into_l2": 0.1302,
+   "p_into_l1": 0.1269,
+   "l2_share": 0.429,
+   "l2_run_median": 3.0,
+   "l2_run_mean": 5.3878,
+   "l1_run_median": 7.0,
+   "switch_punct": 0.7219,
+   "nonswitch_punct": 0.0394
+  },
+  "Malay": {
+   "conversations": 8386,
+   "conv_share": 0.0358,
+   "word": 446080,
+   "word_share": 0.0228,
+   "scored": 437694,
+   "sw": 69933,
+   "switch_rate": 0.1598,
+   "p_into_l2": 0.1434,
+   "p_into_l1": 0.1853,
+   "l2_share": 0.3914,
+   "l2_run_median": 2.0,
+   "l2_run_mean": 4.0631,
+   "l1_run_median": 5.0,
+   "switch_punct": 0.5352,
+   "nonswitch_punct": 0.07
+  },
+  "Tagalog": {
+   "conversations": 8537,
+   "conv_share": 0.0365,
+   "word": 484035,
+   "word_share": 0.0247,
+   "scored": 475498,
+   "sw": 105948,
+   "switch_rate": 0.2228,
+   "p_into_l2": 0.2283,
+   "p_into_l1": 0.2168,
+   "l2_share": 0.4784,
+   "l2_run_median": 2.0,
+   "l2_run_mean": 3.5453,
+   "l1_run_median": 3.0,
+   "switch_punct": 0.3496,
+   "nonswitch_punct": 0.0855
+  },
+  "Hindi": {
+   "conversations": 8381,
+   "conv_share": 0.0358,
+   "word": 470438,
+   "word_share": 0.024,
+   "scored": 462057,
+   "sw": 118789,
+   "switch_rate": 0.2571,
+   "p_into_l2": 0.2484,
+   "p_into_l1": 0.2676,
+   "l2_share": 0.4524,
+   "l2_run_median": 1.0,
+   "l2_run_mean": 2.9326,
+   "l1_run_median": 3.0,
+   "switch_punct": 0.3374,
+   "nonswitch_punct": 0.0482
+  }
+ },
+ "by_attribute": {
+  "cs_type": {
+   "Extra-sentential / Tag switching": {
+    "conversations": 78390,
+    "switch_rate": 0.1376,
+    "l2_share": 0.1817,
+    "l2_run": 2.8554
+   },
+   "Intersentential": {
+    "conversations": 78227,
+    "switch_rate": 0.0848,
+    "l2_share": 0.3429,
+    "l2_run": 6.8988
+   },
+   "Intrasentential": {
+    "conversations": 77555,
+    "switch_rate": 0.1111,
+    "l2_share": 0.251,
+    "l2_run": 4.2769
+   }
+  },
+  "cs_ratio": {
+   "30%": {
+    "conversations": 78375,
+    "switch_rate": 0.1134,
+    "l2_share": 0.2799,
+    "l2_run": 4.7887
+   },
+   "50%": {
+    "conversations": 78052,
+    "switch_rate": 0.1124,
+    "l2_share": 0.258,
+    "l2_run": 4.5765
+   },
+   "70%": {
+    "conversations": 77745,
+    "switch_rate": 0.1078,
+    "l2_share": 0.2374,
+    "l2_run": 4.4946
+   }
+  },
+  "conversation_type": {
+   "multi-turn": {
+    "conversations": 116784,
+    "switch_rate": 0.1097,
+    "l2_share": 0.2329,
+    "l2_run": 4.6367
+   },
+   "single_turn": {
+    "conversations": 117388,
+    "switch_rate": 0.1126,
+    "l2_share": 0.284,
+    "l2_run": 4.5954
+   }
+  },
+  "age": {
+   "18-25": {
+    "conversations": 46738,
+    "switch_rate": 0.1153,
+    "l2_share": 0.2627,
+    "l2_run": 4.5319
+   },
+   "26-35": {
+    "conversations": 46845,
+    "switch_rate": 0.1122,
+    "l2_share": 0.2602,
+    "l2_run": 4.6084
+   },
+   "56-65": {
+    "conversations": 46866,
+    "switch_rate": 0.107,
+    "l2_share": 0.2577,
+    "l2_run": 4.7794
+   },
+   "66+": {
+    "conversations": 46915,
+    "switch_rate": 0.105,
+    "l2_share": 0.2542,
+    "l2_run": 4.7731
+   },
+   "8-17": {
+    "conversations": 46808,
+    "switch_rate": 0.1164,
+    "l2_share": 0.2577,
+    "l2_run": 4.3977
+   }
+  },
+  "gender": {
+   "Female": {
+    "conversations": 117222,
+    "switch_rate": 0.1112,
+    "l2_share": 0.2583,
+    "l2_run": 4.61
+   },
+   "Male": {
+    "conversations": 116950,
+    "switch_rate": 0.1112,
+    "l2_share": 0.2587,
+    "l2_run": 4.6258
+   }
+  },
+  "education_level": {
+   "College": {
+    "conversations": 58823,
+    "switch_rate": 0.1126,
+    "l2_share": 0.2593,
+    "l2_run": 4.5896
+   },
+   "Doctor": {
+    "conversations": 58333,
+    "switch_rate": 0.1098,
+    "l2_share": 0.2594,
+    "l2_run": 4.6963
+   },
+   "High School": {
+    "conversations": 58699,
+    "switch_rate": 0.1125,
+    "l2_share": 0.2557,
+    "l2_run": 4.5165
+   },
+   "Master": {
+    "conversations": 58317,
+    "switch_rate": 0.1098,
+    "l2_share": 0.2595,
+    "l2_run": 4.671
+   }
+  },
+  "topic": {
+   "business": {
+    "conversations": 26327,
+    "switch_rate": 0.1212,
+    "l2_share": 0.2665,
+    "l2_run": 4.4414
+   },
+   "entertainment": {
+    "conversations": 26014,
+    "switch_rate": 0.1181,
+    "l2_share": 0.2556,
+    "l2_run": 4.2297
+   },
+   "general": {
+    "conversations": 25962,
+    "switch_rate": 0.1122,
+    "l2_share": 0.26,
+    "l2_run": 4.623
+   },
+   "health": {
+    "conversations": 26121,
+    "switch_rate": 0.1011,
+    "l2_share": 0.2591,
+    "l2_run": 5.0418
+   },
+   "nation": {
+    "conversations": 25912,
+    "switch_rate": 0.0907,
+    "l2_share": 0.2497,
+    "l2_run": 5.3135
+   },
+   "science": {
+    "conversations": 25983,
+    "switch_rate": 0.1081,
+    "l2_share": 0.2549,
+    "l2_run": 4.7001
+   },
+   "sports": {
+    "conversations": 26083,
+    "switch_rate": 0.1162,
+    "l2_share": 0.2539,
+    "l2_run": 4.3064
+   },
+   "technology": {
+    "conversations": 25710,
+    "switch_rate": 0.1402,
+    "l2_share": 0.2779,
+    "l2_run": 3.8227
+   },
+   "world": {
+    "conversations": 26060,
+    "switch_rate": 0.0929,
+    "l2_share": 0.249,
+    "l2_run": 5.1762
+   }
+  },
+  "cs_function": {
+   "Directive": {
+    "conversations": 39169,
+    "switch_rate": 0.1132,
+    "l2_share": 0.2634,
+    "l2_run": 4.6832
+   },
+   "Expressive": {
+    "conversations": 38891,
+    "switch_rate": 0.112,
+    "l2_share": 0.2577,
+    "l2_run": 4.6229
+   },
+   "Metalinguistic": {
+    "conversations": 39148,
+    "switch_rate": 0.1086,
+    "l2_share": 0.2571,
+    "l2_run": 4.7077
+   },
+   "Phatic": {
+    "conversations": 39013,
+    "switch_rate": 0.1113,
+    "l2_share": 0.255,
+    "l2_run": 4.4563
+   },
+   "Poetic": {
+    "conversations": 38982,
+    "switch_rate": 0.1128,
+    "l2_share": 0.2553,
+    "l2_run": 4.4597
+   },
+   "Referential": {
+    "conversations": 38969,
+    "switch_rate": 0.1091,
+    "l2_share": 0.2625,
+    "l2_run": 4.7745
+   }
+  }
+ },
+ "column_values": {
+  "age": [
+   "18-25",
+   "26-35",
+   "56-65",
+   "66+",
+   "8-17"
+  ],
+  "gender": [
+   "Female",
+   "Male"
+  ],
+  "education_level": [
+   "College",
+   "Doctor",
+   "High School",
+   "Master"
+  ],
+  "topic": [
+   "business",
+   "entertainment",
+   "general",
+   "health",
+   "nation",
+   "science",
+   "sports",
+   "technology",
+   "world"
+  ],
+  "tense": [
+   "Future",
+   "Past",
+   "Present"
+  ],
+  "perspective": [
+   "First Person",
+   "Third Person"
+  ],
+  "cs_ratio": [
+   "30%",
+   "50%",
+   "70%"
+  ],
+  "conversation_type": [
+   "multi-turn",
+   "single_turn"
+  ],
+  "cs_type": [
+   "Extra-sentential / Tag switching",
+   "Intersentential",
+   "Intrasentential"
+  ],
+  "cs_function": [
+   "Directive",
+   "Expressive",
+   "Metalinguistic",
+   "Phatic",
+   "Poetic",
+   "Referential"
+  ]
+ }
+}

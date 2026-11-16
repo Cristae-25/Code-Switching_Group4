@@ -1,6 +1,6 @@
 # 2026-11-03: Lexical override on AnE-LID (labels version 2)
 
-**What changed:** `src/lexical_override.py`, applied by `scripts/apply_names_policy.py`, which is on by default; `--no-lexical-override` reproduces version 1. It also runs inside `dispatch.tag_tokens` for any future re-tag. Version-1 files are kept in `data/v1final/`.
+**What changed:** `src/lexical_override.py`, applied by `scripts/labelling/apply_names_policy.py`, which is on by default; `--no-lexical-override` reproduces version 1. It also runs inside `dispatch.tag_tokens` for any future re-tag. Version-1 files are kept in `data/v1final/`.
 
 ## Why
 
@@ -48,7 +48,7 @@ Sub-word training labels: scored positions unchanged (18,211,198); switches 1,89
    The rule fires on 17 tokens of LinCE spa-eng and 20 of Denglisch (`logs/eval_public_override.log`), and accuracy is unchanged to 0.1%.
 3. **Consensus after the fix:** Malay 95.8% → 99.1%, Vietnamese 99.0% → 99.8%, Tagalog 98.6% → 98.8%. This is **partly circular**: on the flipped tokens, the labels now follow dict-freq.
 4. **Spot-check of random flips in context:** correct (`yang`, `dengan`, `untuk`, `và`, `của`, `sa`, `parang`, `matchs`, `stade`). The one error class found, acronyms (`AI` → French ×55), is now excluded.
-5. **The same model, re-scored on the new labels without retraining** (`scripts/rescore_preds.py xlmr_prev_gap data/subword.parquet`):
+5. **The same model, re-scored on the new labels without retraining** (`scripts/analysis/rescore_preds.py xlmr_prev_gap data/subword.parquet`):
 
    | Pair | F1, v1 labels | F1, v2 labels |
    |---|---:|---:|

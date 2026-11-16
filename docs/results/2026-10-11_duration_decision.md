@@ -9,7 +9,7 @@
 - **Model and data:** the same as the [2026-09-30 ablations](2026-09-30_ablations.md): the from-scratch causal transformer on XLM-R pieces, all 15 pairs.
 - **Run:** 6,000 steps, `--seed 0`, on an M3.
 - **Evaluation:** the threshold is tuned on val and test is scored once. Duration is scored at true switch points whose class is certain (n = 180,990).
-- **Earlier runs:** their offsets were fit offline from the saved predictions with `scripts/tune_duration.py`. New runs fit them during training and write `duration_tuned` into the results JSON.
+- **Earlier runs:** their offsets were fit offline from the saved predictions with `scripts/analysis/tune_duration.py`. New runs fit them during training and write `duration_tuned` into the results JSON.
 
 ## Results (test split)
 

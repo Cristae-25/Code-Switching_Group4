@@ -9,7 +9,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 def _mod():
     spec = importlib.util.spec_from_file_location(
-        "tune_thresholds", os.path.join(ROOT, "scripts", "tune_thresholds.py"))
+        "tune_thresholds", os.path.join(ROOT, "scripts", "analysis", "tune_thresholds.py"))
     m = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(m)
     return m

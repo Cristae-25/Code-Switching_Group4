@@ -1,6 +1,6 @@
 # Contributing
 
-How we work in this repo. Who owns what is in [`docs/TEAM_PLAN.md`](docs/TEAM_PLAN.md); what the project is, in [`README.md`](README.md).
+How we work in this repo. What the project is is in [`README.md`](README.md).
 
 ## 1. One-time setup
 
@@ -17,9 +17,9 @@ How we work in this repo. Who owns what is in [`docs/TEAM_PLAN.md`](docs/TEAM_PL
 3. **Token.** Create a Hugging Face **read** token. Put `HF_TOKEN=hf_...` in `.env` (gitignored), and add the same token as a Kaggle secret named `HF_TOKEN`.
 4. **Data.**
    ```bash
-   ./.venv/bin/python scripts/download_labels.py --all     # labels -> data/final/, data/tagged.parquet
+   ./.venv/bin/python scripts/labelling/download_labels.py --all     # labels -> data/final/, data/tagged.parquet
    ./.venv/bin/hf download Shelton1013/SwitchLingua_text --repo-type dataset --token "$HF_TOKEN"
-   ./.venv/bin/python scripts/build_subword.py             # -> data/subword.parquet (XLM-R pieces, ~10 min)
+   ./.venv/bin/python scripts/labelling/build_subword.py             # -> data/subword.parquet (XLM-R pieces, ~10 min)
    ```
 
 ## 2. Git workflow
@@ -56,20 +56,18 @@ These are what make our numbers trustworthy. Don't change them without a team de
 
 | Where | What | Command |
 |---|---|---|
-| Laptop | baselines | `./.venv/bin/python scripts/baseline_anticipation.py --unit subword` |
-| Laptop | from-scratch model (~35 min on an M3) | `./.venv/bin/python scripts/train_anticipation.py --unit subword --steps 6000 --seed 0 --save-preds data/preds/<name>.npz --out data/<name>.json --ckpt models/<name>.pt` |
+| Laptop | baselines | `./.venv/bin/python scripts/training/baseline_anticipation.py --unit subword` |
+| Laptop | from-scratch model (~35 min on an M3) | `./.venv/bin/python scripts/training/train_anticipation.py --unit subword --steps 6000 --seed 0 --save-preds data/preds/<name>.npz --out data/<name>.json --ckpt models/<name>.pt` |
 | Kaggle (GPU) | XLM-R or mBERT | `kaggle/train_pretrained.ipynb`: set `MODEL` and the tuning flags in its first cell; `SMOKE = True` first |
 
 **Tuning flags** (all off by default): `--seed`, `--save-preds`, `--dur-class-weights balanced`, `--prev-lang`, `--predict-at word_end`, `--turn-sep`. What each does, and how much it helped, is in [`docs/results/2026-09-30_ablations.md`](docs/results/2026-09-30_ablations.md).
 
-**Before any Kaggle run,** add a row to [`docs/RUN_LOG.md`](docs/RUN_LOG.md): who, the settings `TAG`, and the estimated hours. Fill in the result afterwards.
-
 ## 5. Reporting a result
 
-1. **Results file:** put the run's JSON in `data/` (the Kaggle Output tab has `data/anticipation_<TAG>.json`) and its predictions in `data/preds/`.
+1. **Results file:** put the run's JSON in `data/results/` (the Kaggle Output tab has `data/results/anticipation_<TAG>.json`) and its predictions in `data/preds/`.
 2. **Dated record:** add `docs/results/YYYY-MM-DD_<topic>.md` with the settings (seed, steps, flags), the tables and what they mean. Add a row to `docs/results/README.md`.
-3. **Scorecard:** run `./.venv/bin/python scripts/compare_models.py` to refresh `docs/model_comparison.md`. Add new result files to its `DEFAULT_SPECS` if they aren't picked up.
-4. **Your pairs:** run `./.venv/bin/python scripts/pair_report.py --pair "<L1>-><L2>" --preds data/preds/<file>.npz --md docs/pairs/<L1>-<L2>.md`, then add your notes below the generated part.
+3. **Scorecard:** run `./.venv/bin/python scripts/analysis/compare_models.py` to refresh `docs/model_comparison.md`. Add new result files to its `DEFAULT_SPECS` if they aren't picked up.
+4. **Your pairs:** run `./.venv/bin/python scripts/analysis/pair_report.py --pair "<L1>-><L2>" --preds data/preds/<file>.npz --md docs/pairs/<L1>-<L2>.md`, then add your notes below the generated part.
 5. **Commit the JSON and the docs** (not the `.npz` predictions or the checkpoint), and open a PR.
 
 State numbers with their unit (words or which tokenizer's pieces) and the seed. A single run's ±0.005 isn't a finding; the Week 12 seeds give the intervals.
@@ -78,10 +76,10 @@ State numbers with their unit (words or which tokenizer's pieces) and the seed. 
 
 | Tool | What it's for |
 |---|---|
-| `scripts/pair_report.py` | one pair across all models, plus its worst errors as text |
-| `scripts/tune_thresholds.py` | re-tune thresholds on saved predictions (no GPU) |
-| `scripts/compare_models.py` | the full scorecard |
-| `scripts/eval_anticipation_pair.py` | score a checkpoint on one exact pair |
-| `scripts/review_server.py --lang <L1>` | spot-check labels in the browser (report-only) |
-| `scripts/export_token_labels.py`, `kaggle/load_labels.ipynb` | per-token label files and other names policies |
+| `scripts/analysis/pair_report.py` | one pair across all models, plus its worst errors as text |
+| `scripts/analysis/tune_thresholds.py` | re-tune thresholds on saved predictions (no GPU) |
+| `scripts/analysis/compare_models.py` | the full scorecard |
+| `scripts/training/eval_anticipation_pair.py` | score a checkpoint on one exact pair |
+| `scripts/labelling/review_server.py --lang <L1>` | spot-check labels in the browser (report-only) |
+| `scripts/labelling/export_token_labels.py`, `kaggle/load_labels.ipynb` | per-token label files and other names policies |
 | `notebooks/switch_eda.ipynb` | when switches happen and how long they last, per pair |

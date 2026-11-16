@@ -187,7 +187,7 @@ mBERT gets `Woh kal/hin`, `Prime Minister/en`, `Carney/ne` essentially perfect.
 
 ---
 
-### 3.5 XLM-RoBERTa, fine-tuned — `scripts/train_xlmr_lid.py`
+### 3.5 XLM-RoBERTa, fine-tuned — `archive/train_xlmr_lid.py`
 
 **Hypothesis.** XLM-R is pretrained on 2.5 TB of CommonCrawl across 100
 languages, versus mBERT's Wikipedia. It should have far better Malay and Tagalog
@@ -295,7 +295,7 @@ genuinely requires a model.
 
 ---
 
-### 3.8 CANINE, character-level — `scripts/train_canine_lid.py`
+### 3.8 CANINE, character-level — `archive/train_canine_lid.py`
 
 **Hypothesis being tested.** Every other model here tokenises into subwords
 learned from a fixed corpus. Romanized Hindi has *no standard orthography* —
@@ -461,15 +461,15 @@ from mBERT's 88%. Under dict-freq it scores 100% on 48 tokens and is no longer
 the outlier. Still only 48 tokens.
 
 **3. Human review — built, not yet run. This is the blocking item.**
-**Superseded (2026-09-27):** hand review was dropped in favour of automated evaluation on human-annotated public sets (`scripts/eval_public.py`) and corpus-wide tagger agreement (`scripts/consensus_corpus.py`), and the review tool was deleted. The original plan follows.
+**Superseded (2026-09-27):** hand review was dropped in favour of automated evaluation on human-annotated public sets (`scripts/labelling/eval_public.py`) and corpus-wide tagger agreement (`scripts/labelling/consensus_corpus.py`), and the review tool was deleted. The original plan follows.
 
-`scripts/review_server.py` served a stratified sample with per-token correction,
+`scripts/labelling/review_server.py` served a stratified sample with per-token correction,
 storing verdicts in SQLite and marking each row `✓ HAND-VERIFIED`:
 
 ```
-./.venv/bin/python scripts/review_server.py --hard --control 5   # review 430 rows
-./.venv/bin/python scripts/review_server.py --report --hard      # accuracy + Wilson CIs
-./.venv/bin/python scripts/review_server.py --apply              # write back to parquet
+./.venv/bin/python scripts/labelling/review_server.py --hard --control 5   # review 430 rows
+./.venv/bin/python scripts/labelling/review_server.py --report --hard      # accuracy + Wilson CIs
+./.venv/bin/python scripts/labelling/review_server.py --apply              # write back to parquet
 ```
 
 430 rows (~27,800 tokens) — ~70× the current gold set. `--apply` adds
@@ -489,13 +489,13 @@ spaeng is retired from production.
 cd ~/Northeastern_GitHub/code-switch          # use ./.venv/bin/python throughout
 
 ./.venv/bin/python -m pytest tests/ -q        # 81 tests
-./.venv/bin/python scripts/eval_dict.py       # §3.6, §3.7 + overlap table
-./.venv/bin/python scripts/eval_xlmr.py       # §3.5
-./.venv/bin/python scripts/train_xlmr_lid.py  # retrain XLM-R (~110 min, MPS)
-./.venv/bin/python scripts/run_tagging.py     # full corpus -> data/tagged.parquet
-./.venv/bin/python scripts/export_sample.py   # 2,100 rows, per-token CSV
-./.venv/bin/python scripts/eval_public.py       # human-annotated LinCE + Denglisch
-./.venv/bin/python scripts/consensus_corpus.py  # corpus-wide agreement
+./.venv/bin/python archive/eval_dict.py       # §3.6, §3.7 + overlap table
+./.venv/bin/python archive/eval_xlmr.py       # §3.5
+./.venv/bin/python archive/train_xlmr_lid.py  # retrain XLM-R (~110 min, MPS)
+./.venv/bin/python scripts/labelling/run_tagging.py     # full corpus -> data/tagged.parquet
+./.venv/bin/python scripts/labelling/export_sample.py   # 2,100 rows, per-token CSV
+./.venv/bin/python scripts/labelling/eval_public.py       # human-annotated LinCE + Denglisch
+./.venv/bin/python scripts/labelling/consensus_corpus.py  # corpus-wide agreement
 ```
 
 The `archive/` scripts need model weights that were deleted to save disk space: retrain XLM-R and CANINE, and re-download fastText's `lid.176.bin`.
@@ -504,7 +504,7 @@ The `archive/` scripts need model weights that were deleted to save disk space: 
 |---|---|
 | `data/tagged.parquet` | 234,172 rows · 22,349,157 labelled tokens · 67 MB |
 | `data/gold_eval.json` | 324 hand-labelled tokens, 8 languages |
-| `data/sample_tokens.csv` | 160,942 tokens, one row each, from `scripts/export_sample.py` (not in the repo: it contains corpus text) |
+| `data/sample_tokens.csv` | 160,942 tokens, one row each, from `scripts/labelling/export_sample.py` (not in the repo: it contains corpus text) |
 | `data/tagged_pre_ane.parquet` | labels from before AnE-LID and NE, for diffing |
 | `models/xlmr-hineng-lid/` | fine-tuned XLM-R, 97.13% LinCE dev |
 

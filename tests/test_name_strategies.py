@@ -2,7 +2,7 @@
 
 ``tests/fixtures/name_cases.json`` freezes the real AnE-NER masks and AnE-LID
 labels for 20 hand-picked sentences (regenerate with
-``scripts/compare_name_strategies.py --refresh``), so these tests exercise the
+``scripts/labelling/compare_name_strategies.py --refresh``), so these tests exercise the
 policies on genuine model output without loading a model.
 
 Policies (``segments.resolve_names``):

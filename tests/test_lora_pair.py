@@ -85,7 +85,7 @@ def test_lora_checkpoint_round_trips_through_build_model():
 
 def test_optimizer_trains_only_adapters_and_heads_under_lora():
     import importlib.util, pathlib
-    path = pathlib.Path(__file__).resolve().parents[1] / "scripts" / "train_anticipation.py"
+    path = pathlib.Path(__file__).resolve().parents[1] / "scripts" / "training" / "train_anticipation.py"
     spec = importlib.util.spec_from_file_location("train_anticipation", path)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)

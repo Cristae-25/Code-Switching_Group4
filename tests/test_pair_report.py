@@ -10,7 +10,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def _mod():
-    spec = importlib.util.spec_from_file_location("pair_report", os.path.join(ROOT, "scripts", "pair_report.py"))
+    spec = importlib.util.spec_from_file_location("pair_report", os.path.join(ROOT, "scripts", "analysis", "pair_report.py"))
     m = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(m)
     return m

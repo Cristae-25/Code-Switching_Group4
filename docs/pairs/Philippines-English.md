@@ -21,4 +21,4 @@ Switch F1 is on each model's own pieces (tokenizers differ). Shared F1 is on the
 
 ## Owner's notes
 
-_Findings from the per-pair checklist (docs/TEAM_PLAN.md): EDA, label spot-check, error types, the experiment. Regenerate the tables above with `scripts/pair_report.py --pair "Philippines->English" --preds <preds.npz> --md docs/pairs/Philippines-English.md`, then paste your notes back below._
+_Findings from the per-pair checklist: EDA, label spot-check, error types, the experiment. Regenerate the tables above with `scripts/analysis/pair_report.py --pair "Philippines->English" --preds <preds.npz> --md docs/pairs/Philippines-English.md`, then paste your notes back below._

@@ -12,12 +12,12 @@
 **Protocol:**
 - **Switch threshold:** τ = 0.377 in both runs, tuned on val.
 - **Duration:** scored at the 125,675 true switch points whose class is certain. The raw argmax and the val-tuned decision (`duration_tuned`, offsets fit on val) are both reported.
-- **Intervals:** 95% intervals come from a row-level paired bootstrap, 1,000 resamples (`scripts/bootstrap_preds.py`).
+- **Intervals:** 95% intervals come from a row-level paired bootstrap, 1,000 resamples (`scripts/analysis/bootstrap_preds.py`).
 
 **Files:**
 - results JSONs: [`2026-10-12_xlmr_6pairs.json`](2026-10-12_xlmr_6pairs.json) and [`2026-10-12_xlmr_durw_6pairs.json`](2026-10-12_xlmr_durw_6pairs.json);
 - bootstrap intervals: [`2026-10-12_bootstrap_6pairs_vs_durw.json`](2026-10-12_bootstrap_6pairs_vs_durw.json);
-- predictions: `data/preds_xlmr_6pairs.npz` and `data/preds_xlmr_durw_6pairs.npz`, gitignored.
+- predictions: `data/preds/xlmr_6pairs.npz` and `data/preds/xlmr_durw_6pairs.npz`, gitignored.
 
 ## 1. Switch prediction: weighting changes nothing
 
@@ -62,7 +62,7 @@ Per pair, macro-F1:
 | Arabic | 4,562 | 0.570 | 0.604 | 0.596 | **0.599** | 0.370 / 0.379 | 0.528 |
 | Russian | 4,363 | 0.549 | 0.585 | 0.593 | 0.586 | 0.351 / 0.347 | 0.512 |
 
-The training-free bars for the same points are piece lookup macro-F1 0.396–0.479 and most-common-class 0.225–0.271 ([baselines](../../data/baseline_anticipation_subword_6pairs.json)).
+The training-free bars for the same points are piece lookup macro-F1 0.396–0.479 and most-common-class 0.225–0.271 ([baselines](../../data/results/baseline_anticipation_subword_6pairs.json)).
 
 **Reading.**
 - **On the raw argmax, weighting is a real duration gain on every pair:** macro-F1 +0.015 to +0.040, Medium F1 +0.10 to +0.15, all intervals excluding 0. The price is accuracy (−0.037) and end-to-end accuracy (−0.027), because the weighted model stops defaulting to Large, the commonest and easiest class.

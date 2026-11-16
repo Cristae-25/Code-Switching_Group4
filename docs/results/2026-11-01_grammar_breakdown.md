@@ -2,7 +2,7 @@
 
 **Why:** mid-clause switches (nothing between word t and t+1) cause 57% of XLM-R's missed switches ([punctuation breakdown](2026-11-01_punct_breakdown.md)). Before building a grammar input, this checks whether those misses cluster on prefix-only word properties the model is not using.
 
-**How:** `./.venv/bin/python scripts/grammar_breakdown.py xlmr_6pairs` (8 s). It covers the last piece of each word, mid-clause positions only (1.04 M; 52 k switches; 27,430 misses, the same misses as the punctuation breakdown), on the `xlmr_6pairs` test split at τ = 0.377. The switch loss is unweighted BCE, so the model's **mean predicted probability** can be compared with each group's **base rate**. A big gap would mean an unused cue. Word frequency comes from wordfreq tables, read directly with Chinese simplified first, because Cantonese is written in traditional characters. Output: `data/grammar_breakdown_xlmr_6pairs.json`, with per-pair tables.
+**How:** `./.venv/bin/python scripts/analysis/grammar_breakdown.py xlmr_6pairs` (8 s). It covers the last piece of each word, mid-clause positions only (1.04 M; 52 k switches; 27,430 misses, the same misses as the punctuation breakdown), on the `xlmr_6pairs` test split at τ = 0.377. The switch loss is unweighted BCE, so the model's **mean predicted probability** can be compared with each group's **base rate**. A big gap would mean an unused cue. Word frequency comes from wordfreq tables, read directly with Chinese simplified first, because Cantonese is written in traditional characters. Output: `data/results/grammar_breakdown_xlmr_6pairs.json`, with per-pair tables.
 
 ## Results (base rate vs. the model's mean probability, then F1 and share of misses)
 

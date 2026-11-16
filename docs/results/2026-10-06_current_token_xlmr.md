@@ -7,7 +7,7 @@
 - **The model.** `CausalPretrained(context=1)` encodes every piece as its own length-1 sequence, so the prediction at t reads piece t and nothing else (not even the past), and every piece has the same position. `check_context_free` (`src/causal_model.py`) rewrites every *other* position, past and future, and asserts that no logit at t moves. It runs before training, alongside `check_causality`, which a current-token model passes trivially. The check fails on the full-prefix model, which is the test that it can detect a leak (`tests/test_xlmr_model.py`).
 - **Side inputs.** `--context 1` refuses `--prev-lang` and `--turn-sep` (extra context) and `--predict-at word_end` (scoring only word ends tells the model the next piece starts a new word). There is no pair embedding.
 - **Bare `▁` pieces** carry the *next* character's offsets. They are NONE, so they are never scored (pinned in `tests/test_subword.py`).
-- **Tokenization.** The pieces come from tokenizing whole utterances; a streaming model only has the prefix. `scripts/audit_prefix_tokenization.py` re-tokenizes `text[:end of piece]` for every scored piece:
+- **Tokenization.** The pieces come from tokenizing whole utterances; a streaming model only has the prefix. `scripts/labelling/audit_prefix_tokenization.py` re-tokenizes `text[:end of piece]` for every scored piece:
 
   | Pair | Scored pieces (val + test) | Last piece differs | Some prefix piece differs |
   |---|---:|---:|---:|
@@ -22,7 +22,7 @@
 
 ## Training-free results (test split, the 6 pairs only, local)
 
-`./.venv/bin/python scripts/baseline_anticipation.py --unit subword --langs Cantonese,Chinese,Japanese,Korean,Russian,Arabic --json data/baseline_anticipation_subword_6pairs.json` (28 s; 10.7 M train positions, 1.34 M test, base rate 0.098). Thresholds tuned on val.
+`./.venv/bin/python scripts/training/baseline_anticipation.py --unit subword --langs Cantonese,Chinese,Japanese,Korean,Russian,Arabic --json data/results/baseline_anticipation_subword_6pairs.json` (28 s; 10.7 M train positions, 1.34 M test, base rate 0.098). Thresholds tuned on val.
 
 | Model | P | R | F1 | Macro-F1 | F1 into L2 | F1 into L1 |
 |---|---:|---:|---:|---:|---:|---:|
@@ -43,6 +43,6 @@ The piece id alone carries far more than the one bit `naive_l2` uses: 0.427 agai
 
 ## Still to run
 
-The XLM-R current-token model itself: Kaggle, `CONTEXT = 1`, `PAIRS = "Cantonese,Chinese,Japanese,Korean,Russian,Arabic"` (TAG `xlmr_ctx1_6pairs`, logged in `RUN_LOG.md`). Sanity bounds: F1 ≥ the piece lookup's 0.427 on most pairs, and well below the full prefix. A result close to the full prefix would mean a leak.
+The XLM-R current-token model itself: Kaggle, `CONTEXT = 1`, `PAIRS = "Cantonese,Chinese,Japanese,Korean,Russian,Arabic"` (TAG `xlmr_ctx1_6pairs`). Sanity bounds: F1 ≥ the piece lookup's 0.427 on most pairs, and well below the full prefix. A result close to the full prefix would mean a leak.
 
 **Confound:** the full-prefix XLM-R numbers above come from training on all 15 pairs. A matched full-prefix run on the same 6 pairs (`PAIRS` set, `CONTEXT = None`, about 1 h) makes the context gap exact.

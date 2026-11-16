@@ -120,7 +120,7 @@ USES_DICT = {
 #
 # The gold set above saturated (every tier at ~99-100% on 26-59 self-labelled
 # tokens), so the decision was made on human-annotated public data instead
-# (scripts/eval_public.py, L1/EN tokens only):
+# (scripts/labelling/eval_public.py, L1/EN tokens only):
 #
 #   set                      n     dict-freq   mBERT    AnE-LID
 #   LinCE spaeng dev      31,667     94.1%     98.8%     99.4%

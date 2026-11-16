@@ -27,7 +27,7 @@ Raw switch F1 on each run's own positions: 0.450, 0.452, 0.450, 0.461, and 0.488
 
 ## Offline thresholds (no GPU)
 
-`scripts/tune_thresholds.py` re-tunes the switch threshold on the saved val predictions, per language pair or per direction, and applies it to test:
+`scripts/analysis/tune_thresholds.py` re-tunes the switch threshold on the saved val predictions, per language pair or per direction, and applies it to test:
 
 | Run | Global threshold: F1 / macro-F1 | Per-pair: F1 / macro-F1 | Per-direction: F1 / macro-F1 |
 |---|---|---|---|

@@ -2,12 +2,12 @@
 
 **Why:** a switch label sits on the last language-bearing piece *before* any punctuation, so the model decides at `home` in `home, 然后` without having read the comma ([punctuation breakdown](2026-11-01_punct_breakdown.md)). Before spending a Kaggle run on moving the label, this measures a training-free lower bound on the gain.
 
-**How:** `./.venv/bin/python scripts/punct_recalib.py xlmr_prev` (13 s).
+**How:** `./.venv/bin/python scripts/analysis/punct_recalib.py xlmr_prev` (13 s).
 - **Inputs:** the saved `xlmr_prev` logits, plus the kind of gap that follows each position (`adjacent` / `comma` / `sentence_end` / `other_gap` / `turn`, the buckets from `punct_breakdown.py`). The gap kind is exactly what a model deciding at the punctuation would also know.
 - **Model:** a logistic recalibration `[1, logit, bucket one-hot, bucket × logit]`.
 - **Fit and score:** fitted on **val**, τ re-chosen on val, scored on **test**.
 - **Check:** the raw row reproduces the run json (pooled F1 0.6461).
-- **Output:** `data/punct_recalib_xlmr_prev.json`.
+- **Output:** `data/results/punct_recalib_xlmr_prev.json`.
 
 ## Results (test, 15 pairs)
 

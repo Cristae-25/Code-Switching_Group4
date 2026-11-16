@@ -15,7 +15,7 @@ Rows labelled by AnE-LID or dict-freq carry `quality = "provisional"`, since the
 
 ## Scores on human-annotated data
 
-Measured by `scripts/eval_public.py` on sets that people labelled word by word:
+Measured by `scripts/labelling/eval_public.py` on sets that people labelled word by word:
 
 | Set | Words | dict-freq | mBERT (retired) | **AnE-LID (used)** |
 |---|---:|---:|---:|---:|
@@ -25,7 +25,7 @@ Measured by `scripts/eval_public.py` on sets that people labelled word by word:
 
 \* AnE-LID saw Denglisch in training, so treat 99.9% as an upper bound.
 
-**Coverage on our own corpus.** `scripts/consensus_corpus.py` runs dict-freq next to AnE-LID on every AnE-labelled row. The two share no evidence (a neural model vs. a word list). Where they agree, the label was right **99.3–100%** of the time on the public sets above, and they disagree on only 2–4% of tokens.
+**Coverage on our own corpus.** `scripts/labelling/consensus_corpus.py` runs dict-freq next to AnE-LID on every AnE-labelled row. The two share no evidence (a neural model vs. a word list). Where they agree, the label was right **99.3–100%** of the time on the public sets above, and they disagree on only 2–4% of tokens.
 
 **What the numbers mean for the labels.** On the Latin-script pairs, single-word "islands" in the first language are the signature of tagging errors. After the switch to AnE-LID, Spanish, French, Italian and Vietnamese sit in the same 1–4% band as the script-exact pairs. Hindi, Tagalog and Malay stay higher (14–28%), which is most likely genuine speech style (a single Hindi or Tagalog function word between English words), not error. See `groupUpdate1.md` §5.2.
 
@@ -43,7 +43,7 @@ Two alternatives are stored and selectable in `kaggle/load_labels.ipynb`:
 ## From word labels to prediction labels
 
 - **Word level** (`data/tagged.parquet`): one language per word; CJK scripts per character.
-- **Sub-word level** (`scripts/build_subword.py`): the original text is tokenized with the `xlm-roberta-base` tokenizer, and each piece takes the language of the word it sits in. Only 155 of 21.7 M pieces straddle two languages.
+- **Sub-word level** (`scripts/labelling/build_subword.py`): the original text is tokenized with the `xlm-roberta-base` tokenizer, and each piece takes the language of the word it sits in. Only 155 of 21.7 M pieces straddle two languages.
 - **Targets, at either level:**
   - `y_sw`: whether the next token switches.
   - `y_len`: at a switch, the length of the new run.

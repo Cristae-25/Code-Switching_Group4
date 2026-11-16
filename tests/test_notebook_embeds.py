@@ -10,11 +10,11 @@ import pytest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BUILDERS = ["build_pretrained_notebook", "build_untrained_notebook", "build_labels_notebook",
-            "build_kaggle_notebook"]
+            "build_kaggle_notebook", "build_loss_sweep_notebook"]
 
 
 def _builder(name):
-    spec = importlib.util.spec_from_file_location(name, os.path.join(ROOT, "scripts", f"{name}.py"))
+    spec = importlib.util.spec_from_file_location(name, os.path.join(ROOT, "scripts", "notebooks", f"{name}.py"))
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
@@ -46,13 +46,14 @@ def test_every_embedded_file_ships_what_it_imports(name):
     b = _builder(name)
     shipped = set(b.MODULES)
     files = [os.path.join(ROOT, "src", f"{m}.py") for m in b.MODULES]
-    files += [os.path.join(ROOT, "scripts", f"{s}.py") for s in getattr(b, "SCRIPTS", [])]
+    files += [os.path.join(ROOT, "scripts", *f"{s}.py".split("/")) for s in getattr(b, "SCRIPTS", [])]
     missing = {(m, os.path.relpath(f, ROOT)) for f in files
                for m in _module_level_src_imports(open(f).read()) if m not in shipped}
     assert not missing, f"{name}.MODULES lacks: {sorted(missing)}"
 
 
-@pytest.mark.parametrize("name", ["build_pretrained_notebook", "build_untrained_notebook"])
+@pytest.mark.parametrize("name", ["build_pretrained_notebook", "build_untrained_notebook",
+                                  "build_loss_sweep_notebook"])
 def test_the_training_notebooks_run_their_training_script(tmp_path, name):
     """Write the notebook's %%writefile cells to a clean folder and import the
     training script from there, as Kaggle does: a module left out fails here."""
@@ -73,8 +74,10 @@ def test_the_training_notebooks_run_their_training_script(tmp_path, name):
         src = "".join(cell["source"]) if isinstance(cell["source"], list) else cell["source"]
         if cell["cell_type"] == "code" and src.startswith("%%writefile "):
             head, body = src.split("\n", 1)
-            (work / head.split(" ", 1)[1].strip()).write_text(body)
-    r = subprocess.run([sys.executable, "scripts/train_anticipation.py", "--help"], cwd=work,
+            dest = work / head.split(" ", 1)[1].strip()
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_text(body)
+    r = subprocess.run([sys.executable, "scripts/training/train_anticipation.py", "--help"], cwd=work,
                        capture_output=True, text=True, timeout=300)
     assert r.returncode == 0, r.stderr[-2000:]
-    assert "--freeze-backbone" in r.stdout
+    assert "--freeze-backbone" in r.stdout and "--dur-classes" in r.stdout
