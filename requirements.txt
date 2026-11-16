@@ -1,0 +1,33 @@
+# Versions are the ones in .venv. The torch/transformers pair is pinned
+# deliberately: transformers 4.47.1 segfaults under torch 2.10 (exit 139).
+pandas==3.0.5
+numpy==2.5.3
+pyarrow==25.0.1
+regex==2026.9.10
+wordfreq==3.1.1
+torch==2.14.0
+transformers==5.17.0
+datasets==5.0.1
+python-dotenv==1.2.3
+tqdm==4.70.1
+pytest==9.1.1
+
+# CJK word segmentation (groupUpdate1.md §5.3 item 5). unidic-lite bundles the
+# dictionary fugashi needs.
+jieba==0.42.1
+fugashi[unidic-lite]==1.5.2
+
+# Notebook use (notebooks/eda.ipynb, src/inspection.py)
+ipykernel==7.3.0
+ipython==9.17.1
+
+# Figures (scripts/plot_*.py)
+matplotlib==3.11.2
+seaborn==0.13.2
+
+# Only for the retired fastText tier (src/model_tagger.py) - not installed in
+# .venv. Upstream `fasttext` ships source-only and fails to build on Python 3.13
+# (RuntimeError: libc++ is needed!). fasttext-predict is a prebuilt,
+# prediction-only wheel that installs as a module named `fasttext` with the
+# same load_model/predict API, so model_tagger.py is unchanged.
+fasttext-predict

@@ -1,0 +1,53 @@
+# --- Secrets --------------------------------------------------------------
+# HF_TOKEN / HF_FULL live here. Never commit it.
+.env
+.env.*
+
+# --- Data -----------------------------------------------------------------
+# SwitchLingua is a gated dataset: no corpus text or derived labels in git.
+# Everything under data/ is ignored except the small result summaries in
+# data/results/ (the consensus summaries stay local, as before).
+data/*
+!data/results/
+data/results/consensus*.json
+
+# --- Model weights and outputs -------------------------------------------
+models/
+out/
+
+# --- Python / tooling -----------------------------------------------------
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ipynb_checkpoints/
+*.egg-info/
+
+# --- Editors, OS, local agent state --------------------------------------
+.DS_Store
+.vscode/
+.idea/
+.superpowers/
+.claude/settings.local.json
+logs/
+
+# Overleaf paper (synced by hand, not tracked)
+paper/
+paper-overleaf.zip
+
+# --- Personal notes, agent files, retired work (kept on disk, not shared) --
+CLAUDE.md
+.claude/
+archive/
+docs/design/
+docs/superpowers/
+docs/team/RUN_LOG.md
+docs/team/TEAM_PLAN.md
+docs/updates/team_meeting1.md
+docs/updates/update2_requirements.md
+
+# --- Superseded figures ---------------------------------------------------
+docs/figures/chris/team_meeting1/
+docs/figures/chris/all_pairs/
+docs/figures/chris/mbert/
+data/results/*.png
