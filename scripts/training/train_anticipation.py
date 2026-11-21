@@ -16,7 +16,6 @@ Everything is streamed; the process never holds more than a shuffle buffer.
 from __future__ import annotations
 
 import argparse
-import contextlib
 import json
 import os
 import sys
@@ -28,16 +27,16 @@ import torch.nn as nn
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from src.anticipation import N_DUR, collapse_duration, dur_labels  # noqa: E402
-from src.causal_model import (check_causality, check_context_free, duration_probs,  # noqa: E402
-                              ordinal_targets)
-from src.evaluation import format_duration, format_report, full_report  # noqa: E402
-from src.metrics import apply_class_offsets, duration_scores, prf, tune_class_offsets  # noqa: E402
+from src.anticipation import N_DUR, dur_labels  # noqa: E402
+from src.causal_model import check_causality, check_context_free, ordinal_targets  # noqa: E402
+from src.evaluation import format_duration, format_report  # noqa: E402
+from src.metrics import apply_class_offsets, duration_scores, tune_class_offsets  # noqa: E402
 from src.models import build_model, pair_ids  # noqa: E402
 from src.streaming import (DEFAULT_PATHS, VOCAB_PATHS, build_subword_vocab,  # noqa: E402
                            build_vocab, make_loader)
-from src.training import (count_duration_classes, duration_class_weights,  # noqa: E402
-                          save_predictions, set_seed)
+from src.training import (autocast, batch_dur_labels, count_duration_classes,  # noqa: E402
+                          duration_class_weights, evaluate, head_classes, save_predictions,
+                          score, scored_positions, set_seed, tune_threshold)
 
 UNIT_DEFAULTS = {"word": dict(window=256, stride=192, vocab_size=50_000,
                               out="data/results/anticipation_word.json",
@@ -121,21 +120,6 @@ def device_of(name: str) -> torch.device:
     return torch.device("mps" if torch.backends.mps.is_available() else "cpu")
 
 
-def autocast(dev):
-    """fp16 on CUDA (a T4 has no bf16); full precision elsewhere."""
-    if dev.type == "cuda":
-        return torch.autocast("cuda", dtype=torch.float16)
-    return contextlib.nullcontext()
-
-
-def scored_positions(b):
-    """``(row_id, position in the row)`` of every scored position in a batch, in order."""
-    m = b["sw_mask"]
-    row = b["row_id"].unsqueeze(1).expand_as(m)[m]
-    pos = (b["start"].unsqueeze(1) + torch.arange(m.shape[1])).expand_as(m)[m]
-    return row.numpy(), pos.numpy()
-
-
 def curve_point(model, loader, dev, n_batches: int, step: int) -> dict:
     """Validation snapshot during training (``--eval-every``), on a fixed val slice.
 
@@ -168,50 +152,6 @@ def curve_point(model, loader, dev, n_batches: int, step: int) -> dict:
                 n=int(len(y)), n_dur=int(nd))
 
 
-def head_classes(model, dur) -> int:
-    """Duration classes a model predicts: a softmax head's width, or cuts + 1 (ordinal)."""
-    return dur.shape[-1] + (1 if getattr(model, "dur_ordinal", False) else 0)
-
-
-def batch_dur_labels(b, n_dur: int):
-    """The batch's ``y_dur`` for an ``n_dur``-class head: as stored (3), or Short / Large (2)."""
-    return collapse_duration(b["y_dur"]) if n_dur == 2 else b["y_dur"]
-
-
-@torch.no_grad()
-def evaluate(model, loader, dev, max_batches=0):
-    """Logits and labels at every scored position, with pair and direction."""
-    model.eval()
-    out = {k: [] for k in ("logit", "y", "pair", "lang", "dtrue", "dpred", "dprob", "dpair",
-                           "dlang", "dlogit", "drow", "shared", "row", "pos")}
-    for i, b in enumerate(loader):
-        if max_batches and i >= max_batches:
-            break
-        with autocast(dev):
-            sw, dur = model(b["word_ids"].to(dev), b["lang_ids"].to(dev), pair_ids(model, b).to(dev))
-        m = b["sw_mask"]
-        out["logit"].append(sw.float().cpu()[m].numpy())
-        out["y"].append(b["y_sw"][m].numpy())
-        out["pair"].append(b["report_pair"].unsqueeze(1).expand_as(m)[m].numpy())
-        out["lang"].append(b["cur_lang"][m].numpy())        # direction: current language
-        dm = b["dur_mask"]
-        if dm.any():
-            out["dtrue"].append(batch_dur_labels(b, head_classes(model, dur))[dm].numpy())
-            probs = duration_probs(dur.float().cpu()[dm], getattr(model, "dur_ordinal", False))
-            out["dpred"].append(probs.argmax(-1).numpy())
-            out["dprob"].append(probs.numpy())
-            # aligned with dtrue: dur_mask is a subset of sw_mask
-            out["dpair"].append(b["report_pair"].unsqueeze(1).expand_as(dm)[dm].numpy())
-            out["dlang"].append(b["cur_lang"][dm].numpy())
-            out["dlogit"].append(sw.float().cpu()[dm].numpy())
-            out["drow"].append(b["row_id"].unsqueeze(1).expand_as(dm)[dm].numpy())
-        out["shared"].append(b["shared_mask"][m].numpy())
-        row, pos = scored_positions(b)                      # trace errors back to the text
-        out["row"].append(row)
-        out["pos"].append(pos)
-    return {k: np.concatenate(v) if v else np.empty(0) for k, v in out.items()}
-
-
 def make_scheduler(opt, lrs, steps):
     """One-cycle schedule; the warm-up is at least 2 steps (OneCycleLR divides by it)."""
     if steps < 4:
@@ -238,34 +178,6 @@ def optimizer_groups(model, args):
             p.requires_grad_(False)
         return [dict(params=heads, lr=args.head_lr)], [args.head_lr]
     return [dict(params=body, lr=args.lr), dict(params=heads, lr=args.head_lr)], [args.lr, args.head_lr]
-
-
-def tune_threshold(prob, truth):
-    """Pick the F1-maximising threshold on a held-out split."""
-    best = (0.0, 0.5)
-    for t in np.quantile(prob, np.linspace(0.50, 0.999, 60)):
-        best = max(best, (prf(truth, prob >= t)["f1"], float(t)))
-    return best[1], best[0]
-
-
-def score(res, tau):
-    """The full report, plus ``shared``: the same report on the positions every
-    model shares (the last piece of each non-CJK word), comparable across tokenizers."""
-    pred = (1 / (1 + np.exp(-res["logit"])) >= tau).astype(int)
-    # Duration side arrays are aligned with dtrue; older prediction files lack them.
-    def aligned(k):
-        return res[k] if k in res and len(res[k]) == len(res["dtrue"]) else None
-
-    n_dur = res["dprob"].shape[1] if np.ndim(res.get("dprob")) == 2 else N_DUR
-    dlogit = aligned("dlogit")
-    fired = None if dlogit is None else 1 / (1 + np.exp(-np.asarray(dlogit))) >= tau
-    rep = full_report(res["y"], pred, res["pair"], res["lang"], res["dtrue"], res["dpred"],
-                      dur_pairs=aligned("dpair"), dur_langs=aligned("dlang"), dur_fired=fired,
-                      n_dur=n_dur)
-    sh = np.asarray(res.get("shared", np.zeros(len(pred), bool)), dtype=bool)
-    if sh.any():
-        rep["shared"] = full_report(res["y"][sh], pred[sh], res["pair"][sh], res["lang"][sh])
-    return rep
 
 
 DURATION_KEYS = ("duration", "duration_end_to_end", "duration_per_pair", "duration_per_direction")

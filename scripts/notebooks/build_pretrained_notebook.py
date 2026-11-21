@@ -20,8 +20,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 OUT = os.path.join(ROOT, "kaggle", "train_pretrained.ipynb")
 MODULES = ["__init__", "routing", "tokenizer", "dict_tagger", "lexical_override", "unicode_tagger", "dispatch",
            "segments", "anticipation", "subword", "token_labels", "metrics", "evaluation",
-           "streaming", "causal_model", "lora", "xlmr_model", "models", "training"]
-SCRIPTS = ["training/train_anticipation"]   # paths under scripts/, mirrored in the notebook
+           "streaming", "causal_model", "lora", "xlmr_model", "models", "training", "lince"]
+SCRIPTS = ["training/train_anticipation", "training/eval_lince"]   # paths under scripts/, mirrored in the notebook
 
 
 def md(text: str) -> dict:
@@ -56,6 +56,8 @@ The protocol is the same as every other model in the project:
 
 The report (`src/evaluation.py`) covers switch P/R/F1 overall, per language pair, macro-F1 across pairs, per direction, and 3-class duration. It also includes **shared positions**, the last piece of each non-CJK word. Those are the same words for every tokenizer, so that score compares these models fairly. A causality check runs before training and must report `PREFIX-ONLY OK`.
 
+**Short vs Large duration.** `DUR_CLASSES = 2` trains a two-class head: Short (1–6) vs Large (7+). It needs no new labels, because Small and Medium are merged on the fly (`anticipation.collapse_duration`). The final binary runs (2026-11-20) used: `STEPS = 36_000`, `PREV_LANG = True`, `DECIDE_AT = "gap"`, `RESHUFFLE = True`, `EVAL_EVERY = 3000`, `DUR_CLASSES = 2`, `SAVE_CHECKPOINT = True`, `SUFFIX = "v2"`. That gives the tag `<model>_bin_prev_gap_36k_rsv2`, which is directly comparable to `<model>_prev_gap_36k_rsv2` (3-class). Expect about 3.6 h on a T4 for XLM-R.
+
 ## How to run
 
 1. **Settings:** set the Accelerator to **GPU T4 ×2** (one GPU is used) and turn Internet **on**.
@@ -63,7 +65,7 @@ The report (`src/evaluation.py`) covers switch P/R/F1 overall, per language pair
 3. **Settings cell:** set `MODEL`, then **Save Version → Save & Run All**, so the run continues if you close the browser.
    - Use `SMOKE = True` first for a quick check.
    - A full run of 12,000 steps took about 72 minutes on a T4 for XLM-R; RoBERTa and mBERT are smaller.
-4. **Collect the results:** from the version's Output tab, download `data/results/anticipation_<TAG>.json` (and `_zeroshot.json`, if run), plus `data/preds/<TAG>.npz`, into the same paths in the repo. `TAG` is the model name plus the tuning flags that are on (e.g. `xlmr_durw_prev`). Then run `./.venv/bin/python scripts/analysis/compare_models.py`. The saved predictions let thresholds be tuned locally with no GPU.
+4. **Collect the results:** from the version's Output tab, download `data/results/anticipation_<TAG>.json` (and `_zeroshot.json`, if run), `data/preds/<TAG>.npz`, `data/results/lince_<TAG>.json` and, for the replay dashboard's live mode, `models/anticipation_<TAG>.pt` (about 1.1 GB for XLM-R), into the same paths in the repo. `TAG` is the model name plus the tuning flags that are on (e.g. `xlmr_durw_prev`). Then run `./.venv/bin/python scripts/analysis/compare_models.py`. The saved predictions let thresholds be tuned locally with no GPU.
 """
 
 CONFIG = """
@@ -83,6 +85,7 @@ SEED = 0                # reproducible initialisation and data order
 DUR_WEIGHTS = "none"    # "balanced": class-weighted duration loss (weights from the train split)
 DUR_WEIGHT = 0.3        # lambda_2 in L = L_sw + lambda_2 * L_dur (0.3 = every run before 2026-11-10)
 DUR_HEAD = "softmax"    # "ordinal": cumulative cuts P(>Small), P(>Medium) (duration is ordered)
+DUR_CLASSES = 3         # 2: Short (1-6) vs Large (7+), --dur-classes 2 (needs DUR_HEAD "softmax"); labels collapse on the fly
 TURN_SEP = False        # separator piece between speaker turns
 PREV_LANG = False       # input: the language of the last finished word
 PAIR_EMB = False        # input: a learned embedding of the row's language pair (15 pairs)
@@ -94,7 +97,8 @@ DECIDE_AT = "gap"       # adopted 2026-11-03 (groupUpdate2 §1): each label sits
 CONTEXT = None          # 1: read the current piece only, no prefix (needs the three flags above off)
 PAIRS = ""              # comma-separated first languages to train and score on ("" = all 15),
                         # e.g. "Cantonese,Chinese,Japanese,Korean,Russian,Arabic"
-SAVE_CHECKPOINT = True  # 0.5-1.1 GB in /kaggle/working
+SAVE_CHECKPOINT = True  # 0.5-1.1 GB in /kaggle/working; the final weights, needed for the replay dashboard's live mode
+EVAL_LINCE = True       # after training, score the checkpoint on LinCE tweets (human tags; spaeng + hineng)
 SUFFIX = ""             # appended to TAG, e.g. "_v2" so a rerun on new labels does not overwrite an old run's files
 LABELS_REPO = "CodeSwitchGroup4/switchlingua-tagged-final"
 """
@@ -168,7 +172,7 @@ common = (f"python scripts/training/train_anticipation.py --model {MODEL} --unit
           f"--steps {steps} --batch-size {BATCH} --window {WINDOW} --stride {STRIDE} "
           f"--lr {LORA_LR if LORA_R else LR} --head-lr {HEAD_LR} --eval-batches {evalb} --workers 2 "
           f"--seed {SEED} --dur-class-weights {DUR_WEIGHTS} --dur-head {DUR_HEAD} --predict-at {PREDICT_AT} "
-          f"--decide-at {DECIDE_AT} --dur-weight {DUR_WEIGHT}"
+          f"--decide-at {DECIDE_AT} --dur-weight {DUR_WEIGHT} --dur-classes {DUR_CLASSES}"
           + (" --turn-sep" if TURN_SEP else "") + (" --prev-lang" if PREV_LANG else "")
           + (" --pair-emb" if PAIR_EMB else "") + (f" --lora-r {LORA_R}" if LORA_R else "")
           + (f" --backbone {BACKBONE}" if BACKBONE else "")
@@ -176,6 +180,7 @@ common = (f"python scripts/training/train_anticipation.py --model {MODEL} --unit
           + (" --reshuffle-epochs" if RESHUFFLE else "")
           + (f" --context {CONTEXT}" if CONTEXT else ""))
 TAG = MODEL + ("L" if "large" in BACKBONE else "") + "".join(s for s, on in (("_durw", DUR_WEIGHTS != "none"), ("_ord", DUR_HEAD == "ordinal"),
+                                      ("_bin", DUR_CLASSES == 2),
                                       ("_sep", TURN_SEP),
                                       ("_prev", PREV_LANG), ("_pair", PAIR_EMB),
                                       (f"_lora{LORA_R}", bool(LORA_R)), ("_wend", PREDICT_AT == "word_end"),
@@ -206,6 +211,7 @@ else:
 
 RESULTS = """
 import json
+from src.anticipation import dur_labels
 for f in (f"data/results/anticipation_{TAG}.json", f"data/results/anticipation_{TAG}_zeroshot.json"):
     if not os.path.exists(f):
         continue
@@ -216,7 +222,8 @@ for f in (f"data/results/anticipation_{TAG}.json", f"data/results/anticipation_{
     print(f"  switch F1 {o['f1']:.3f} (P {o['precision']:.3f}, R {o['recall']:.3f}) | "
           f"macro-F1 {r['macro_f1']:.3f} | shared F1 {sh:.3f}")
     print("  by direction:", {k: round(v["f1"], 3) for k, v in r["per_direction"].items()})
-    print(f"  duration: 3-class accuracy {d['accuracy']:.3f} | macro-F1 {d['macro_f1']:.3f}")
+    names = dur_labels(len(d["per_class_f1"]))
+    print(f"  duration: {len(names)}-class accuracy {d['accuracy']:.3f} | macro-F1 {d['macro_f1']:.3f}")
     if "zero_shot" in r:
         z = r["zero_shot"]
         print(f"  ZERO-SHOT held-out F1 {z['overall']['f1']:.3f} | macro {z['macro_f1']:.3f} | "
@@ -226,7 +233,7 @@ for f in (f"data/results/anticipation_{TAG}.json", f"data/results/anticipation_{
     if "duration_tuned" in r:
         t = r["duration_tuned"]["report"]["duration"]
         print(f"  duration, offsets tuned on val {r['duration_tuned']['offsets']}: accuracy "
-              f"{t['accuracy']:.3f} | macro-F1 {t['macro_f1']:.3f} | F1 small/medium/large "
+              f"{t['accuracy']:.3f} | macro-F1 {t['macro_f1']:.3f} | F1 {'/'.join(names)} "
               + " / ".join(f"{f:.3f}" for f in t["per_class_f1"]))
     if "duration_end_to_end" in r:
         e = r["duration_end_to_end"]
@@ -234,11 +241,24 @@ for f in (f"data/results/anticipation_{TAG}.json", f"data/results/anticipation_{
               f"{e['accuracy']:.3f} | macro-F1 {e['macro_f1']:.3f}")
     if "duration_per_pair" in r:
         display(pd.DataFrame({k: {"n": v["n"], "acc": v["accuracy"], "macro-F1": v["macro_f1"],
-                                  "F1 small": v["per_class_f1"][0], "F1 medium": v["per_class_f1"][1],
-                                  "F1 large": v["per_class_f1"][2],
+                                  **{f"F1 {c}": f for c, f in zip(names, v["per_class_f1"])},
                                   "e2e acc": v.get("end_to_end", {}).get("accuracy")}
                               for k, v in r["duration_per_pair"].items()}).T
                 .sort_values("macro-F1", ascending=False).round(3))
+"""
+
+LINCE = """
+# Out-of-domain check: the trained checkpoint on LinCE tweets (human word tags, so no tagger error).
+# The threshold is the one tuned on SwitchLingua val; an "oracle" block re-tunes it on LinCE val.
+ck = f"models/anticipation_{TAG}.pt"
+if EVAL_LINCE and RUN_FULL and os.path.exists(ck):
+    cmd = (f"python scripts/training/eval_lince.py --ckpt {ck} --batch-size 64"
+           + (" --splits validation --pairs hineng" if SMOKE else "")
+           + f" --out data/results/lince_{TAG}.json --save-preds data/preds/lince_{TAG}.npz")
+    print(cmd)
+    get_ipython().system(f"{cmd} 2>&1 | tee logs/lince_{TAG}.log")
+else:
+    print("LinCE evaluation skipped (EVAL_LINCE off, RUN_FULL off, or no checkpoint)")
 """
 
 CLEANUP = """
@@ -265,6 +285,8 @@ def main() -> int:
               md("## Train and evaluate (all 15 pairs)"), code(TRAIN),
               md("## Optional: zero-shot run (4 pairs held out)"), code(ZS),
               md("## Results"), code(RESULTS),
+              md("## LinCE: out-of-domain tweets\nScores the checkpoint on LinCE Spanish-English and Hindi-English tweets (validation + train, both human-tagged and never trained on). Writes `data/results/lince_<TAG>.json`."),
+              code(LINCE),
               md("## Clean up\nRemoves the derived training file (it comes from private labels). Result JSONs stay in `data/results/`."),
               code(CLEANUP)]
     nb = {"cells": cells, "metadata": {

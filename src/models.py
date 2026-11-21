@@ -39,3 +39,20 @@ def pair_ids(model, batch):
     ``--pair-emb`` reads ``report_pair``, the full 15-pair index (``PAIR_KEYS``).
     """
     return batch[getattr(model, "pair_key", "pair_id")]
+
+
+def load_checkpoint(path: str, map_location="cpu", fallback_args: dict | None = None):
+    """``(model in eval mode, checkpoint dict)`` from a ``train_anticipation.py --ckpt`` file.
+
+    The architecture is rebuilt from the checkpoint's own args (a pretrained backbone's
+    config only, no weight download), then the trained weights are loaded.
+    """
+    import torch
+    ck = torch.load(path, map_location=map_location, weights_only=False)
+    cfg = {**(fallback_args or {}), **ck.get("args", {})}
+    model = build_model(cfg, ck.get("vocab_size"), use_lang=ck.get("use_lang", True),
+                        n_dur=int(cfg.get("dur_classes") or N_DUR), pretrained=False)
+    model.load_state_dict(ck["state"])
+    model.eval()
+    ck["args"] = cfg
+    return model, ck
