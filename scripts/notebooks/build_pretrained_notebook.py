@@ -58,6 +58,8 @@ The report (`src/evaluation.py`) covers switch P/R/F1 overall, per language pair
 
 **Short vs Large duration.** `DUR_CLASSES = 2` trains a two-class head: Short (1–6) vs Large (7+). It needs no new labels, because Small and Medium are merged on the fly (`anticipation.collapse_duration`). The final binary runs (2026-11-20) used: `STEPS = 36_000`, `PREV_LANG = True`, `DECIDE_AT = "gap"`, `RESHUFFLE = True`, `EVAL_EVERY = 3000`, `DUR_CLASSES = 2`, `SAVE_CHECKPOINT = True`, `SUFFIX = "v2"`. That gives the tag `<model>_bin_prev_gap_36k_rsv2`, which is directly comparable to `<model>_prev_gap_36k_rsv2` (3-class). Expect about 3.6 h on a T4 for XLM-R.
 
+**Multi-dataset training (SwitchLingua + LinCE).** `MIX_LINCE = w` (an integer ≥ 1) trains on SwitchLingua plus the LinCE **train** tweets (`src/lince.mix`), with LinCE's training-split rows repeated `w` times. LinCE **validation** is never trained on: it is the held-out LinCE test. τ is still tuned on SwitchLingua val, and test is scored on the SwitchLingua test split (`--eval-path`), the same rows as every other run. The LinCE cell then scores LinCE validation only. The tag gets `_lince<w>`. The 2026-11 runs use the final-run flags with `MIX_LINCE = 1` and `5`, which put LinCE at about 3% and 12% of training pieces (10% and 36% of training windows). LinCE downloads from its public Hugging Face mirror, so nothing needs uploading.
+
 ## How to run
 
 1. **Settings:** set the Accelerator to **GPU T4 ×2** (one GPU is used) and turn Internet **on**.
@@ -99,6 +101,7 @@ PAIRS = ""              # comma-separated first languages to train and score on 
                         # e.g. "Cantonese,Chinese,Japanese,Korean,Russian,Arabic"
 SAVE_CHECKPOINT = True  # 0.5-1.1 GB in /kaggle/working; the final weights, needed for the replay dashboard's live mode
 EVAL_LINCE = True       # after training, score the checkpoint on LinCE tweets (human tags; spaeng + hineng)
+MIX_LINCE = 0           # >0: also train on LinCE train tweets, repeated this many times (LinCE validation stays held out)
 SUFFIX = ""             # appended to TAG, e.g. "_v2" so a rerun on new labels does not overwrite an old run's files
 LABELS_REPO = "CodeSwitchGroup4/switchlingua-tagged-final"
 """
@@ -164,6 +167,12 @@ te = frame[(frame.row_id % 10 == 9) & (frame.first_language == "Malay")]   # lab
 print("Malay test switches:", int(sum((np.asarray(y) == 1).sum() for y in te.y_sw)),
       "(v2 labels with the lexical override = 7,207; v1 = 7,525)")
 del tagged, cells, texts, frame, te
+TRAIN_PATH = PATH
+if MIX_LINCE:
+    from src import lince
+    TRAIN_PATH, mix_stats = lince.mix(PATH, BACKBONES[MODEL], MIX_LINCE, out=f"data/subword_mix_lince{MIX_LINCE}.parquet")
+    print(f"{TRAIN_PATH}: {mix_stats['rows']:,} rows; LinCE = {mix_stats['lince_share_of_train_pieces']:.1%} "
+          f"of training pieces; {mix_stats}")
 """
 
 TRAIN = """
@@ -178,7 +187,8 @@ common = (f"python scripts/training/train_anticipation.py --model {MODEL} --unit
           + (f" --backbone {BACKBONE}" if BACKBONE else "")
           + (f" --eval-every {EVAL_EVERY}" if EVAL_EVERY and not SMOKE else "")
           + (" --reshuffle-epochs" if RESHUFFLE else "")
-          + (f" --context {CONTEXT}" if CONTEXT else ""))
+          + (f" --context {CONTEXT}" if CONTEXT else "")
+          + (f" --path {TRAIN_PATH} --eval-path {PATH}" if MIX_LINCE else ""))
 TAG = MODEL + ("L" if "large" in BACKBONE else "") + "".join(s for s, on in (("_durw", DUR_WEIGHTS != "none"), ("_ord", DUR_HEAD == "ordinal"),
                                       ("_bin", DUR_CLASSES == 2),
                                       ("_sep", TURN_SEP),
@@ -188,7 +198,8 @@ TAG = MODEL + ("L" if "large" in BACKBONE else "") + "".join(s for s, on in (("_
                                       (f"_dw{DUR_WEIGHT:g}", DUR_WEIGHT != 0.3),
                                       (f"_{STEPS // 1000}k", STEPS != 12_000), ("_rs", RESHUFFLE),
                                       (f"_ctx{CONTEXT}", bool(CONTEXT)),
-                                      (f"_{len(PAIRS.split(','))}pairs", bool(PAIRS))) if on) + SUFFIX
+                                      (f"_{len(PAIRS.split(','))}pairs", bool(PAIRS))) if on) + SUFFIX \
+      + (f"_lince{MIX_LINCE}" if MIX_LINCE else "")
 if RUN_FULL:
     cmd = (f"{common}" + (f" --train-langs {PAIRS}" if PAIRS else "") + f" --out data/results/anticipation_{TAG}.json --ckpt models/anticipation_{TAG}.pt "
            f"--save-preds data/preds/{TAG}.npz")
@@ -253,7 +264,7 @@ LINCE = """
 ck = f"models/anticipation_{TAG}.pt"
 if EVAL_LINCE and RUN_FULL and os.path.exists(ck):
     cmd = (f"python scripts/training/eval_lince.py --ckpt {ck} --batch-size 64"
-           + (" --splits validation --pairs hineng" if SMOKE else "")
+           + (" --splits validation --pairs hineng" if SMOKE else " --splits validation" if MIX_LINCE else "")
            + f" --out data/results/lince_{TAG}.json --save-preds data/preds/lince_{TAG}.npz")
     print(cmd)
     get_ipython().system(f"{cmd} 2>&1 | tee logs/lince_{TAG}.log")
@@ -266,8 +277,9 @@ if not SAVE_CHECKPOINT:
     for f in (f"models/anticipation_{TAG}.pt", f"models/anticipation_{TAG}_zeroshot.pt"):
         if os.path.exists(f):
             os.remove(f)
-if os.path.exists(PATH):                      # derived from the private labels: don't publish it
-    os.remove(PATH)
+for f in {PATH, TRAIN_PATH}:                  # derived from the private labels: don't publish them
+    if os.path.exists(f):
+        os.remove(f)
 print(sorted(os.listdir("data")), sorted(os.listdir("models")))
 """
 
@@ -285,7 +297,7 @@ def main() -> int:
               md("## Train and evaluate (all 15 pairs)"), code(TRAIN),
               md("## Optional: zero-shot run (4 pairs held out)"), code(ZS),
               md("## Results"), code(RESULTS),
-              md("## LinCE: out-of-domain tweets\nScores the checkpoint on LinCE Spanish-English and Hindi-English tweets (validation + train, both human-tagged and never trained on). Writes `data/results/lince_<TAG>.json`."),
+              md("## LinCE: out-of-domain tweets\nScores the checkpoint on LinCE Spanish-English and Hindi-English tweets (validation + train, both human-tagged and never trained on; with `MIX_LINCE`, validation only, because LinCE train was trained on). Writes `data/results/lince_<TAG>.json`."),
               code(LINCE),
               md("## Clean up\nRemoves the derived training file (it comes from private labels). Result JSONs stay in `data/results/`."),
               code(CLEANUP)]

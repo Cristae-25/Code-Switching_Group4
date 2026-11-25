@@ -1,0 +1,136 @@
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+models/anticipation_xlmr_prev_gap_36k_rsv2.pt: xlmr (xlm-roberta-base) | tau 0.413 | 3 duration classes (small, medium, large) | decide_at gap | prev_lang True | device mps
+  spaeng/validation: 37,671 positions, 2,061 switches in 102s
+  hineng/validation: 14,753 positions, 1,091 switches in 25s
+
+LinCE validation - tau from SwitchLingua val
+  switch F1 0.286  (P 0.273, R 0.300, recall 95% CI [0.284, 0.316])  | macro-F1 over pairs 0.294
+
+By direction:
+name     n       base   P      R      F1   
+-------  ------  -----  -----  -----  -----
+into L2  23,562  0.068  0.274  0.234  0.253
+into L1  28,862  0.053  0.272  0.368  0.313
+
+By language pair:
+name              n       base   P      R      F1   
+----------------  ------  -----  -----  -----  -----
+Hindi->English    14,753  0.074  0.294  0.363  0.325
+Spanish->English  37,671  0.055  0.260  0.266  0.263
+
+Duration (true switch points, n=2,232): 3-class accuracy 0.487 | macro-F1 0.446 | within one 0.804 | per-class F1 small 0.573, medium 0.232, large 0.533
+End to end (switch predicted AND class right): accuracy 0.174 | macro-F1 0.243 | switch recall at these points 0.329
+
+Duration by language pair:
+name              n      acc    macroF1  F1_small  F1_medium  F1_large  e2e_acc  e2e_macroF1
+----------------  -----  -----  -------  --------  ---------  --------  -------  -----------
+Spanish->English  1,351  0.474  0.425    0.457     0.225      0.594     0.169    0.191      
+Hindi->English    881    0.507  0.411    0.663     0.246      0.325     0.183    0.239      
+
+Duration by direction:
+name     n      acc    macroF1
+-------  -----  -----  -------
+into L2  1,113  0.567  0.481  
+into L1  1,119  0.408  0.383  
+  Short/Large: macro-F1 0.597 | acc 0.652 | n 2,232 | share Large 0.37
+downloading LinCE lid_spaeng/train
+  built /Users/alphastar/Northeastern_GitHub/code-switch/data/lince/subword_xlm-roberta-base_spaeng_train.parquet: {'rows': 21030, 'failed': 0, 'mixed_pieces': 0, 'pieces': 472278, 'switches': 13970, 'tweets_with_switch': 7984}
+  spaeng/train: 237,576 positions, 13,970 switches in 733s
+downloading LinCE lid_hineng/train
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (1203 > 512). Running this sequence through the model will result in indexing errors
+  built /Users/alphastar/Northeastern_GitHub/code-switch/data/lince/subword_xlm-roberta-base_hineng_train.parquet: {'rows': 4823, 'failed': 0, 'mixed_pieces': 0, 'pieces': 141510, 'switches': 6208, 'tweets_with_switch': 2107}
+  hineng/train: 88,486 positions, 6,208 switches in 174s
+
+LinCE train - tau from SwitchLingua val
+  switch F1 0.277  (P 0.262, R 0.294, recall 95% CI [0.288, 0.301])  | macro-F1 over pairs 0.284
+
+By direction:
+name     n        base   P      R      F1   
+-------  -------  -----  -----  -----  -----
+into L2  170,547  0.062  0.220  0.206  0.213
+into L1  155,515  0.062  0.295  0.391  0.336
+
+By language pair:
+name              n        base   P      R      F1   
+----------------  -------  -----  -----  -----  -----
+Hindi->English    88,486   0.070  0.274  0.338  0.302
+Spanish->English  237,576  0.059  0.257  0.275  0.266
+
+Duration (true switch points, n=13,499): 3-class accuracy 0.488 | macro-F1 0.441 | within one 0.799 | per-class F1 small 0.602, medium 0.225, large 0.497
+End to end (switch predicted AND class right): accuracy 0.138 | macro-F1 0.200 | switch recall at these points 0.297
+
+Duration by language pair:
+name              n      acc    macroF1  F1_small  F1_medium  F1_large  e2e_acc  e2e_macroF1
+----------------  -----  -----  -------  --------  ---------  --------  -------  -----------
+Spanish->English  8,653  0.494  0.455    0.567     0.233      0.563     0.128    0.168      
+Hindi->English    4,846  0.478  0.379    0.639     0.207      0.291     0.155    0.210      
+
+Duration by direction:
+name     n      acc    macroF1
+-------  -----  -----  -------
+into L2  6,961  0.564  0.469  
+into L1  6,538  0.407  0.368  
+  Short/Large: macro-F1 0.584 | acc 0.651 | n 13,499 | share Large 0.36
+
+LinCE, all splits - tau from SwitchLingua val
+  switch F1 0.279  (P 0.264, R 0.295, recall 95% CI [0.289, 0.301])  | macro-F1 over pairs 0.285
+
+By direction:
+name     n        base   P      R      F1   
+-------  -------  -----  -----  -----  -----
+into L2  194,109  0.063  0.227  0.210  0.218
+into L1  184,377  0.061  0.292  0.388  0.333
+
+By language pair:
+name              n        base   P      R      F1   
+----------------  -------  -----  -----  -----  -----
+Hindi->English    103,239  0.071  0.277  0.341  0.306
+Spanish->English  275,247  0.058  0.257  0.274  0.265
+
+Duration (true switch points, n=15,731): 3-class accuracy 0.488 | macro-F1 0.442 | within one 0.800 | per-class F1 small 0.598, medium 0.226, large 0.503
+End to end (switch predicted AND class right): accuracy 0.143 | macro-F1 0.206 | switch recall at these points 0.302
+
+Duration by language pair:
+name              n       acc    macroF1  F1_small  F1_medium  F1_large  e2e_acc  e2e_macroF1
+----------------  ------  -----  -------  --------  ---------  --------  -------  -----------
+Spanish->English  10,004  0.491  0.452    0.555     0.232      0.568     0.134    0.172      
+Hindi->English    5,727   0.482  0.384    0.643     0.213      0.296     0.159    0.215      
+
+Duration by direction:
+name     n      acc    macroF1
+-------  -----  -----  -------
+into L2  8,074  0.565  0.472  
+into L1  7,657  0.407  0.371  
+
+ORACLE: tau re-tuned on LinCE validation (0.232), scored on LinCE train
+  switch F1 0.292  (P 0.224, R 0.419, recall 95% CI [0.412, 0.426])  | macro-F1 over pairs 0.295
+
+By direction:
+name     n        base   P      R      F1   
+-------  -------  -----  -----  -----  -----
+into L2  170,547  0.062  0.193  0.314  0.239
+into L1  155,515  0.062  0.250  0.534  0.341
+
+By language pair:
+name              n        base   P      R      F1   
+----------------  -------  -----  -----  -----  -----
+Hindi->English    88,486   0.070  0.223  0.486  0.306
+Spanish->English  237,576  0.059  0.225  0.389  0.285
+
+Duration (true switch points, n=13,499): 3-class accuracy 0.488 | macro-F1 0.441 | within one 0.799 | per-class F1 small 0.602, medium 0.225, large 0.497
+End to end (switch predicted AND class right): accuracy 0.201 | macro-F1 0.263 | switch recall at these points 0.427
+
+Duration by language pair:
+name              n      acc    macroF1  F1_small  F1_medium  F1_large  e2e_acc  e2e_macroF1
+----------------  -----  -----  -------  --------  ---------  --------  -------  -----------
+Spanish->English  8,653  0.494  0.455    0.567     0.233      0.563     0.183    0.218      
+Hindi->English    4,846  0.478  0.379    0.639     0.207      0.291     0.234    0.274      
+
+Duration by direction:
+name     n      acc    macroF1
+-------  -----  -----  -------
+into L2  6,961  0.564  0.469  
+into L1  6,538  0.407  0.368  
+
+wrote data/results/lince_xlmr_prev_gap_36k_rsv2.json
+saved predictions -> data/preds/lince_xlmr_prev_gap_36k_rsv2.npz

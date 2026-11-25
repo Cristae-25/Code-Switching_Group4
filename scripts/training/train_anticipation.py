@@ -80,6 +80,8 @@ def resolve_defaults(args):
             setattr(args, k, v)
     if args.path is None:
         args.path = DEFAULT_PATHS[args.unit]
+    if getattr(args, "eval_path", None) is None:
+        args.eval_path = args.path               # val (tau, curve) and test read this file
     if args.unit == "subword" and args.names != "script_words":
         # data/subword.parquet was built with the default names policy baked in.
         raise SystemExit("--names only applies to --unit word: the sub-word labels were "
@@ -195,6 +197,9 @@ def main() -> None:
     ap.add_argument("--model", choices=["scratch", *PRETRAINED], default="scratch")
     ap.add_argument("--backbone", default=None, help="override the Hugging Face checkpoint")
     ap.add_argument("--path", default=None)
+    ap.add_argument("--eval-path", default=None,
+                    help="val/test parquet (default --path); e.g. train on a SwitchLingua+LinCE mix "
+                         "(src/lince.mix) but tune tau and score test on data/subword.parquet")
     ap.add_argument("--build-vocab", action="store_true")
     ap.add_argument("--vocab-size", type=int, default=None)
     ap.add_argument("--steps", type=int, default=4000)
@@ -337,7 +342,7 @@ def main() -> None:
           f"freeze_backbone={args.freeze_backbone} pair_emb={args.pair_emb} lora_r={args.lora_r} "
           f"reshuffle_epochs={args.reshuffle_epochs}")
     loader = lambda split, langs, workers=0: make_loader(  # noqa: E731
-        args.path, vocab, split, args.batch_size, workers, languages=langs, **common)
+        args.eval_path, vocab, split, args.batch_size, workers, languages=langs, **common)
     train_loader = make_loader(args.path, vocab, "train", args.batch_size, args.workers,
                                languages=train_langs or None, **common, **train_kw)
     val_loader, test_loader = loader("val", train_langs or None), loader("test", train_langs or None)

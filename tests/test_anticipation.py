@@ -716,3 +716,12 @@ def test_gap_windows_score_the_landing_piece_with_the_word_direction():
     w = next(iter(ds._windows(subword_example(row, decide_at="gap", blank_ids=[BLANK]))))
     assert list(w["sw_mask"][:5]) == [False, True, False, True, False]
     assert w["y_sw"][1] == 1 and w["cur_lang"][1] == 0
+
+
+def test_eval_path_defaults_to_the_training_path_and_can_differ():
+    mod = _train_script()
+    a = mod.resolve_defaults(_args(unit="subword"))
+    assert a.eval_path == a.path == "data/subword.parquet"
+    b = mod.resolve_defaults(_args(unit="subword", path="data/subword_mix_lince5.parquet",
+                                   eval_path="data/subword.parquet"))
+    assert (b.path, b.eval_path) == ("data/subword_mix_lince5.parquet", "data/subword.parquet")

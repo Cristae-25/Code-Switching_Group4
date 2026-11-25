@@ -79,3 +79,52 @@ def test_real_validation_aligns():
                                 max_fail=0.001)
     assert stats["failed"] == 0 and len(pieces) == len(frame)
     assert sum((np.asarray(y) == 1).sum() for y in pieces.y_sw) > 0
+
+
+def _piece_frame(row_ids, first_language="Spanish", n=3):
+    k = len(row_ids)
+    return pd.DataFrame(dict(
+        row_id=list(row_ids), first_language=[first_language] * k, second_language=["English"] * k,
+        quality=["gold"] * k, pieces=[["▁a"] * n] * k, piece_ids=[[5] * n] * k, piece_lang=[[0] * n] * k,
+        y_sw=[[0] * n] * k, y_len=[[1] * n] * k, y_dur=[[0] * n] * k, censored=[[False] * n] * k,
+        dur_known=[[True] * n] * k, word_end=[[True] * n] * k, piece_word=[list(range(n))] * k,
+        piece_utt=[[0] * n] * k, mixed_pieces=[0] * k))
+
+
+def test_mix_repeats_only_lince_training_rows_and_never_adds_validation(tmp_path):
+    import pyarrow.parquet as pq
+
+    from src.lince import mix
+    from src.subword import write_parquet
+    sl = tmp_path / "sl.parquet"
+    write_parquet(_piece_frame(range(20), "Korean"), str(sl))
+    tr_ids = [row_id("spaeng", "train", i) for i in range(10)]          # idx % 10: 0..9
+    lp = tmp_path / "spaeng_train.parquet"
+    write_parquet(_piece_frame(tr_ids), str(lp))
+    out, stats = mix(str(sl), "unused", 3, out=str(tmp_path / "mix.parquet"), pairs=("spaeng",),
+                     lince_paths={"spaeng": str(lp)})
+    rid = pq.read_table(out, columns=["row_id"]).column(0).to_numpy()
+    li = rid[rid >= 10_000_000]
+    counts = {int(r): int((li == r).sum()) for r in tr_ids}
+    assert all(counts[r] == 3 for r in tr_ids if r % 10 < 8)            # training split: x weight
+    assert all(counts[r] == 1 for r in tr_ids if r % 10 >= 8)           # val / test: once
+    assert (rid < 10_000_000).sum() == 20 and stats["rows"] == len(rid) == 20 + 8 * 3 + 2
+    assert not any(describe_row(int(r))[1] == "validation" for r in li)
+    assert 0 < stats["lince_share_of_train_pieces"] < 1
+    again, _ = mix(str(sl), "unused", 3, out=str(tmp_path / "mix2.parquet"), pairs=("spaeng",),
+                   lince_paths={"spaeng": str(lp)})
+    assert (pq.read_table(again, columns=["row_id"]).column(0).to_numpy() == rid).all()   # seeded
+    assert not (rid[:-1] <= rid[1:]).all()                                                # shuffled
+
+
+def test_mix_refuses_lince_validation(tmp_path):
+    from src.lince import mix
+    from src.subword import write_parquet
+    sl, lp = tmp_path / "sl.parquet", tmp_path / "val.parquet"
+    write_parquet(_piece_frame(range(4)), str(sl))
+    write_parquet(_piece_frame([row_id("spaeng", "validation", i) for i in range(4)]), str(lp))
+    with pytest.raises(ValueError):
+        mix(str(sl), "unused", 1, out=str(tmp_path / "m.parquet"), pairs=("spaeng",),
+            lince_paths={"spaeng": str(lp)})
+    with pytest.raises(ValueError):
+        mix(str(sl), "unused", 0, out=str(tmp_path / "m.parquet"))
